@@ -1,0 +1,28 @@
+<svg width="320" height="64" viewBox="0 0 320 64" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="iconGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#06b6d4"/>
+      <stop offset="50%" stop-color="#0ea5e9"/>
+      <stop offset="100%" stop-color="#2563eb"/>
+    </linearGradient>
+    <linearGradient id="textAccent" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#0ea5e9"/>
+      <stop offset="100%" stop-color="#2563eb"/>
+    </linearGradient>
+    <filter id="iconShadow" x="-20%" y="-20%" width="140%" height="140%">
+      <feDropShadow dx="0" dy="2" stdDeviation="2" flood-color="#0ea5e9" flood-opacity="0.25"/>
+    </filter>
+  </defs>
+
+  <!-- Hexagon icon -->
+  <g transform="translate(4, 4)">
+    <path d="M28 2 L50 14 L50 42 L28 54 L6 42 L6 14 Z" fill="url(#iconGrad)" filter="url(#iconShadow)"/>
+    <!-- Lightning bolt -->
+    <path d="M32 10 L21 28 L28 28 L24 46 L39 24 L30 24 Z" fill="white"/>
+  </g>
+
+  <!-- Company name -->
+  <text x="68" y="40" font-family="system-ui, -apple-system, BlinkMacSystemFont, sans-serif" font-size="26" font-weight="700" letter-spacing="-0.02em">
+    <tspan fill="#0f172a">Effortless</tspan><tspan fill="url(#textAccent)">Insight</tspan>
+  </text>
+</svg>

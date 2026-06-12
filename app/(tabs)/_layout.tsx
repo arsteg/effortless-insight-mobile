@@ -1,16 +1,22 @@
+/**
+ * Tab Navigation Layout
+ */
+
 import { Tabs } from 'expo-router';
-import { Home, Upload, CheckSquare, User } from 'lucide-react-native';
+import { View, StyleSheet } from 'react-native';
+import { Home, FileText, Camera, CheckSquare, User } from 'lucide-react-native';
+import { COLORS, SPACING } from '../../src/utils/constants';
 
 export default function TabLayout() {
   return (
     <Tabs
       screenOptions={{
-        tabBarActiveTintColor: '#0ea5e9',
-        tabBarInactiveTintColor: '#9ca3af',
+        tabBarActiveTintColor: COLORS.primary,
+        tabBarInactiveTintColor: COLORS.gray[400],
         tabBarStyle: {
-          backgroundColor: '#ffffff',
+          backgroundColor: COLORS.white,
           borderTopWidth: 1,
-          borderTopColor: '#e5e7eb',
+          borderTopColor: COLORS.gray[200],
           paddingBottom: 5,
           paddingTop: 5,
           height: 60,
@@ -20,9 +26,9 @@ export default function TabLayout() {
           fontWeight: '500',
         },
         headerStyle: {
-          backgroundColor: '#0ea5e9',
+          backgroundColor: COLORS.primary,
         },
-        headerTintColor: '#fff',
+        headerTintColor: COLORS.white,
         headerTitleStyle: {
           fontWeight: 'bold',
         },
@@ -37,11 +43,24 @@ export default function TabLayout() {
         }}
       />
       <Tabs.Screen
+        name="notices"
+        options={{
+          title: 'Notices',
+          tabBarIcon: ({ color, size }) => <FileText color={color} size={size} />,
+          headerTitle: 'Notices',
+        }}
+      />
+      <Tabs.Screen
         name="upload"
         options={{
-          title: 'Upload',
-          tabBarIcon: ({ color, size }) => <Upload color={color} size={size} />,
-          headerTitle: 'Upload Notice',
+          title: 'Scan',
+          tabBarIcon: ({ color, focused }) => (
+            <View style={[styles.scanButton, focused && styles.scanButtonActive]}>
+              <Camera color={COLORS.white} size={24} />
+            </View>
+          ),
+          headerTitle: 'Scan Notice',
+          tabBarLabel: () => null, // Hide label for center button
         }}
       />
       <Tabs.Screen
@@ -63,3 +82,23 @@ export default function TabLayout() {
     </Tabs>
   );
 }
+
+const styles = StyleSheet.create({
+  scanButton: {
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    backgroundColor: COLORS.primary,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: 20,
+    shadowColor: COLORS.primary,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 8,
+  },
+  scanButtonActive: {
+    backgroundColor: COLORS.primaryDark,
+  },
+});

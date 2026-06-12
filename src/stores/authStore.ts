@@ -1,0 +1,331 @@
+/**
+ * Auth Store
+ * Manages authentication state using Zustand
+ */
+
+import { create } from 'zustand';
+import * as LocalAuthentication from 'expo-local-authentication';
+import { UserDto, LoginResponse, TwoFactorRequiredResponse } from '../types';
+import { authApi } from '../services/api';
+import {
+  setTokens,
+  clearTokens,
+  setUser,
+  getUser,
+  clearUser,
+  hasValidTokens,
+  getBiometricEnabled,
+  setBiometricEnabled,
+  getAccessToken,
+} from '../services/storage/secure';
+
+interface AuthState {
+  // State
+  isAuthenticated: boolean;
+  isLoading: boolean;
+  isInitialized: boolean;
+  user: UserDto | null;
+  biometricEnabled: boolean;
+  biometricAvailable: boolean;
+
+  // 2FA state
+  requires2fa: boolean;
+  partialToken: string | null;
+
+  // Actions
+  initialize: () => Promise<void>;
+  login: (email: string, password: string, rememberMe?: boolean) => Promise<void>;
+  complete2fa: (code: string) => Promise<void>;
+  logout: () => Promise<void>;
+  refreshProfile: () => Promise<void>;
+  checkBiometricAvailability: () => Promise<void>;
+  enableBiometric: () => Promise<boolean>;
+  disableBiometric: () => Promise<void>;
+  authenticateWithBiometric: () => Promise<boolean>;
+}
+
+export const useAuthStore = create<AuthState>((set, get) => ({
+  // Initial state
+  isAuthenticated: false,
+  isLoading: true,
+  isInitialized: false,
+  user: null,
+  biometricEnabled: false,
+  biometricAvailable: false,
+  requires2fa: false,
+  partialToken: null,
+
+  /**
+   * Initialize auth state from storage
+   */
+  initialize: async () => {
+    try {
+      set({ isLoading: true });
+
+      // Check if we have valid tokens
+      const hasTokens = await hasValidTokens();
+
+      if (hasTokens) {
+        // Get cached user
+        const cachedUser = await getUser();
+
+        if (cachedUser) {
+          set({
+            isAuthenticated: true,
+            user: cachedUser,
+          });
+
+          // Refresh profile in background
+          try {
+            const profile = await authApi.getProfile();
+            const user: UserDto = {
+              id: profile.id,
+              email: profile.email,
+              name: profile.name,
+              mobile: profile.mobile,
+              avatarUrl: profile.avatarUrl,
+              role: profile.role,
+              organizationId: profile.organization?.id,
+              organizationName: profile.organization?.name,
+            };
+            await setUser(user);
+            set({ user });
+          } catch {
+            // If profile fetch fails, tokens may be invalid
+            await clearTokens();
+            await clearUser();
+            set({ isAuthenticated: false, user: null });
+          }
+        }
+      }
+
+      // Check biometric
+      const biometricEnabled = await getBiometricEnabled();
+      await get().checkBiometricAvailability();
+
+      set({
+        isLoading: false,
+        isInitialized: true,
+        biometricEnabled,
+      });
+    } catch (error) {
+      console.error('Auth initialization error:', error);
+      set({
+        isLoading: false,
+        isInitialized: true,
+        isAuthenticated: false,
+        user: null,
+      });
+    }
+  },
+
+  /**
+   * Login with email and password
+   */
+  login: async (email: string, password: string, rememberMe = false) => {
+    set({ isLoading: true });
+
+    try {
+      const response = await authApi.login(email, password, rememberMe);
+
+      // Check if 2FA is required
+      if ('requires2fa' in response && response.requires2fa) {
+        const twoFaResponse = response as TwoFactorRequiredResponse;
+        set({
+          isLoading: false,
+          requires2fa: true,
+          partialToken: twoFaResponse.partialToken,
+        });
+        return;
+      }
+
+      // Normal login success
+      const loginResponse = response as LoginResponse;
+      await setTokens(loginResponse.accessToken, loginResponse.refreshToken);
+      await setUser(loginResponse.user);
+
+      set({
+        isLoading: false,
+        isAuthenticated: true,
+        user: loginResponse.user,
+        requires2fa: false,
+        partialToken: null,
+      });
+    } catch (error) {
+      set({ isLoading: false });
+      throw error;
+    }
+  },
+
+  /**
+   * Complete 2FA login
+   */
+  complete2fa: async (code: string) => {
+    const { partialToken } = get();
+
+    if (!partialToken) {
+      throw new Error('No 2FA session active');
+    }
+
+    set({ isLoading: true });
+
+    try {
+      const response = await authApi.twoFactorLogin({
+        partialToken,
+        code,
+      });
+
+      await setTokens(response.accessToken, response.refreshToken);
+
+      // Fetch user profile after 2FA
+      const profile = await authApi.getProfile();
+      const user: UserDto = {
+        id: profile.id,
+        email: profile.email,
+        name: profile.name,
+        mobile: profile.mobile,
+        avatarUrl: profile.avatarUrl,
+        role: profile.role,
+        organizationId: profile.organization?.id,
+        organizationName: profile.organization?.name,
+      };
+      await setUser(user);
+
+      set({
+        isLoading: false,
+        isAuthenticated: true,
+        user,
+        requires2fa: false,
+        partialToken: null,
+      });
+    } catch (error) {
+      set({ isLoading: false });
+      throw error;
+    }
+  },
+
+  /**
+   * Logout
+   */
+  logout: async () => {
+    set({ isLoading: true });
+
+    try {
+      // Call logout API (best effort)
+      const token = await getAccessToken();
+      if (token) {
+        await authApi.logout().catch(() => {
+          // Ignore logout API errors
+        });
+      }
+    } finally {
+      // Clear local state
+      await clearTokens();
+      await clearUser();
+
+      set({
+        isLoading: false,
+        isAuthenticated: false,
+        user: null,
+        requires2fa: false,
+        partialToken: null,
+      });
+    }
+  },
+
+  /**
+   * Refresh user profile
+   */
+  refreshProfile: async () => {
+    try {
+      const profile = await authApi.getProfile();
+      const user: UserDto = {
+        id: profile.id,
+        email: profile.email,
+        name: profile.name,
+        mobile: profile.mobile,
+        avatarUrl: profile.avatarUrl,
+        role: profile.role,
+        organizationId: profile.organization?.id,
+        organizationName: profile.organization?.name,
+      };
+      await setUser(user);
+      set({ user });
+    } catch (error) {
+      console.error('Failed to refresh profile:', error);
+      throw error;
+    }
+  },
+
+  /**
+   * Check if biometric auth is available on device
+   */
+  checkBiometricAvailability: async () => {
+    try {
+      const hasHardware = await LocalAuthentication.hasHardwareAsync();
+      const isEnrolled = await LocalAuthentication.isEnrolledAsync();
+      set({ biometricAvailable: hasHardware && isEnrolled });
+    } catch {
+      set({ biometricAvailable: false });
+    }
+  },
+
+  /**
+   * Enable biometric authentication
+   */
+  enableBiometric: async () => {
+    const { biometricAvailable } = get();
+
+    if (!biometricAvailable) {
+      return false;
+    }
+
+    try {
+      // Test biometric auth
+      const result = await LocalAuthentication.authenticateAsync({
+        promptMessage: 'Authenticate to enable biometric login',
+        disableDeviceFallback: false,
+      });
+
+      if (result.success) {
+        await setBiometricEnabled(true);
+        set({ biometricEnabled: true });
+        return true;
+      }
+
+      return false;
+    } catch {
+      return false;
+    }
+  },
+
+  /**
+   * Disable biometric authentication
+   */
+  disableBiometric: async () => {
+    await setBiometricEnabled(false);
+    set({ biometricEnabled: false });
+  },
+
+  /**
+   * Authenticate using biometric
+   */
+  authenticateWithBiometric: async () => {
+    const { biometricEnabled, biometricAvailable } = get();
+
+    if (!biometricEnabled || !biometricAvailable) {
+      return false;
+    }
+
+    try {
+      const result = await LocalAuthentication.authenticateAsync({
+        promptMessage: 'Login with biometrics',
+        disableDeviceFallback: false,
+      });
+
+      return result.success;
+    } catch {
+      return false;
+    }
+  },
+}));

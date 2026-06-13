@@ -3,9 +3,28 @@
  */
 
 import { Tabs } from 'expo-router';
-import { View, StyleSheet } from 'react-native';
-import { Home, FileText, Camera, CheckSquare, User } from 'lucide-react-native';
-import { COLORS, SPACING } from '../../src/utils/constants';
+import { View, Text, StyleSheet } from 'react-native';
+import { Home, FileText, Camera, CheckSquare, Bell, User } from 'lucide-react-native';
+import { COLORS, SPACING, FONT_SIZES, BORDER_RADIUS } from '../../src/utils/constants';
+import { useUnreadCount } from '../../src/hooks/useNotifications';
+
+function NotificationTabIcon({ color, size }: { color: string; size: number }) {
+  const { data } = useUnreadCount();
+  const count = data?.count ?? 0;
+
+  return (
+    <View style={styles.notificationIconContainer}>
+      <Bell color={color} size={size} />
+      {count > 0 && (
+        <View style={styles.notificationBadge}>
+          <Text style={styles.notificationBadgeText}>
+            {count > 9 ? '9+' : count}
+          </Text>
+        </View>
+      )}
+    </View>
+  );
+}
 
 export default function TabLayout() {
   return (
@@ -72,6 +91,16 @@ export default function TabLayout() {
         }}
       />
       <Tabs.Screen
+        name="notifications"
+        options={{
+          title: 'Alerts',
+          tabBarIcon: ({ color, size }) => (
+            <NotificationTabIcon color={color as string} size={size} />
+          ),
+          headerTitle: 'Notifications',
+        }}
+      />
+      <Tabs.Screen
         name="profile"
         options={{
           title: 'Profile',
@@ -100,5 +129,25 @@ const styles = StyleSheet.create({
   },
   scanButtonActive: {
     backgroundColor: COLORS.primaryDark,
+  },
+  notificationIconContainer: {
+    position: 'relative',
+  },
+  notificationBadge: {
+    position: 'absolute',
+    top: -4,
+    right: -8,
+    backgroundColor: COLORS.error,
+    borderRadius: BORDER_RADIUS.full,
+    minWidth: 16,
+    height: 16,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingHorizontal: 4,
+  },
+  notificationBadgeText: {
+    color: COLORS.white,
+    fontSize: FONT_SIZES.xs,
+    fontWeight: '700',
   },
 });

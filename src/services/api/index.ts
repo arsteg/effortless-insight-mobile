@@ -6,3 +6,4 @@ export { apiClient, isApiError, getApiErrorMessage, getApiErrorCode } from './cl
 export { authApi } from './auth';
 export { noticesApi } from './notices';
 export { tasksApi } from './tasks';
+export { notificationsApi } from './notifications';

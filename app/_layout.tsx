@@ -3,15 +3,22 @@
  * Handles auth state, providers, and navigation structure
  */
 
-import { useEffect } from 'react';
+import { useEffect, useRef } from 'react';
 import { Stack, useRouter, useSegments } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
-import { View } from 'react-native';
+import { View, Platform } from 'react-native';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import * as SplashScreen from 'expo-splash-screen';
+import * as Notifications from 'expo-notifications';
 import { useAuthStore, useUIStore } from '../src/stores';
 import { ErrorBoundary, LoadingSpinner, OfflineBanner } from '../src/components/common';
 import { COLORS } from '../src/utils/constants';
+import {
+  setupNotificationChannels,
+  registerPushToken,
+  handleNotificationTap,
+  addNotificationResponseReceivedListener,
+} from '../src/services/pushNotifications';
 
 // Prevent splash screen from auto-hiding
 SplashScreen.preventAutoHideAsync();
@@ -34,6 +41,7 @@ const queryClient = new QueryClient({
 function RootLayoutNav() {
   const router = useRouter();
   const segments = useSegments();
+  const responseListenerRef = useRef<Notifications.EventSubscription | null>(null);
 
   const { isAuthenticated, isInitialized, initialize } = useAuthStore();
   const { initializeNetInfo } = useUIStore();
@@ -43,7 +51,30 @@ function RootLayoutNav() {
     initialize();
     const unsubscribe = initializeNetInfo();
     return unsubscribe;
-  }, []);
+  }, [initialize, initializeNetInfo]);
+
+  // Setup push notifications when authenticated
+  useEffect(() => {
+    if (!isAuthenticated) return;
+
+    // Setup Android notification channels
+    setupNotificationChannels();
+
+    // Register push token
+    registerPushToken();
+
+    // Listen for notification taps
+    const subscription = addNotificationResponseReceivedListener((response) => {
+      handleNotificationTap(response.notification);
+    });
+    responseListenerRef.current = subscription;
+
+    return () => {
+      if (responseListenerRef.current) {
+        responseListenerRef.current.remove();
+      }
+    };
+  }, [isAuthenticated]);
 
   // Hide splash screen when initialized
   useEffect(() => {
@@ -97,6 +128,13 @@ function RootLayoutNav() {
           name="notices/[id]"
           options={{
             title: 'Notice Details',
+            presentation: 'card',
+          }}
+        />
+        <Stack.Screen
+          name="settings"
+          options={{
+            headerShown: false,
             presentation: 'card',
           }}
         />

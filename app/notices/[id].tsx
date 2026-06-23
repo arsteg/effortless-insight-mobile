@@ -2,7 +2,7 @@
  * Notice Detail Screen
  */
 
-import React, { useState } from 'react';
+import React, { useState, useCallback } from 'react';
 import {
   View,
   Text,
@@ -10,6 +10,13 @@ import {
   ScrollView,
   TouchableOpacity,
   RefreshControl,
+  Modal,
+  Alert,
+  TextInput,
+  KeyboardAvoidingView,
+  Platform,
+  Linking,
+  ActivityIndicator,
 } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import {
@@ -22,20 +29,31 @@ import {
   Paperclip,
   Play,
   User,
+  Send,
+  Plus,
+  X,
+  Download,
+  Eye,
+  File,
+  Image,
 } from 'lucide-react-native';
 import { useNotice, useWorkflowProgress, useAttachments, useAdvanceWorkflow } from '../../src/hooks/useNotices';
-import { useNoticeTasks, useComments } from '../../src/hooks/useTasks';
+import { useNoticeTasks, useComments, useCreateComment, useCreateTask, useDocumentRequests, useSubmitDocument } from '../../src/hooks/useTasks';
+import * as DocumentPicker from 'expo-document-picker';
 import { LoadingSpinner, Button, EmptyState } from '../../src/components/common';
 import { COLORS, SPACING, FONT_SIZES, BORDER_RADIUS, RISK_COLORS, STATUS_COLORS } from '../../src/utils/constants';
-import { NoticeDetailDto, TaskDto, CommentResponseDto } from '../../src/types';
+import { NoticeDetailDto, TaskDto, CommentResponseDto, DocumentRequestDto, DocumentRequestStatus } from '../../src/types';
 
-type TabType = 'overview' | 'analysis' | 'tasks' | 'comments';
+type TabType = 'overview' | 'analysis' | 'tasks' | 'comments' | 'documents';
 
 export default function NoticeDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const router = useRouter();
   const [activeTab, setActiveTab] = useState<TabType>('overview');
   const [refreshing, setRefreshing] = useState(false);
+  const [showTransitionModal, setShowTransitionModal] = useState(false);
+  const [showAttachmentsModal, setShowAttachmentsModal] = useState(false);
+  const [downloadingAttachment, setDownloadingAttachment] = useState<string | null>(null);
 
   // Ensure id is defined
   const noticeId = id ?? '';
@@ -45,6 +63,7 @@ export default function NoticeDetailScreen() {
   const { data: tasksData, refetch: refetchTasks } = useNoticeTasks(noticeId);
   const { data: commentsData, refetch: refetchComments } = useComments(noticeId);
   const { data: attachments, refetch: refetchAttachments } = useAttachments(noticeId);
+  const { data: documentRequestsData, refetch: refetchDocRequests } = useDocumentRequests(noticeId);
 
   const advanceWorkflowMutation = useAdvanceWorkflow();
 
@@ -56,8 +75,75 @@ export default function NoticeDetailScreen() {
       refetchTasks(),
       refetchComments(),
       refetchAttachments(),
+      refetchDocRequests(),
     ]);
     setRefreshing(false);
+  };
+
+  const handleAdvanceWorkflow = (transitionKey: string, transitionLabel: string) => {
+    Alert.alert(
+      'Confirm Transition',
+      `Are you sure you want to: ${transitionLabel}?`,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Confirm',
+          onPress: () => {
+            advanceWorkflowMutation.mutate(
+              { noticeId, transitionKey },
+              {
+                onSuccess: () => {
+                  setShowTransitionModal(false);
+                  Alert.alert('Success', 'Workflow advanced successfully');
+                },
+                onError: (error) => {
+                  Alert.alert('Error', error.message || 'Failed to advance workflow');
+                },
+              }
+            );
+          },
+        },
+      ]
+    );
+  };
+
+  const handleOpenAttachment = async (attachment: { id: string; fileName: string; downloadUrl?: string }) => {
+    if (!attachment.downloadUrl) {
+      Alert.alert('Error', 'Download URL not available');
+      return;
+    }
+
+    setDownloadingAttachment(attachment.id);
+    try {
+      const supported = await Linking.canOpenURL(attachment.downloadUrl);
+      if (supported) {
+        await Linking.openURL(attachment.downloadUrl);
+      } else {
+        Alert.alert('Error', 'Cannot open this file type');
+      }
+    } catch (error) {
+      Alert.alert('Error', 'Failed to open attachment');
+    } finally {
+      setDownloadingAttachment(null);
+    }
+  };
+
+  const getFileIcon = (fileName: string) => {
+    const ext = fileName.toLowerCase().split('.').pop();
+    if (['jpg', 'jpeg', 'png', 'gif', 'webp'].includes(ext || '')) {
+      return <Image size={20} color={COLORS.primary} />;
+    }
+    if (ext === 'pdf') {
+      return <FileText size={20} color={COLORS.error} />;
+    }
+    return <File size={20} color={COLORS.gray[500]} />;
+  };
+
+  const formatFileSize = (bytes?: number) => {
+    if (!bytes) return 'Unknown size';
+    if (bytes < 1024) return `${bytes} B`;
+    if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+    return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
   };
 
   if (isLoading || !notice) {
@@ -69,6 +155,7 @@ export default function NoticeDetailScreen() {
     { key: 'analysis', label: 'Analysis' },
     { key: 'tasks', label: 'Tasks', count: tasksData?.tasks.length },
     { key: 'comments', label: 'Comments', count: commentsData?.comments.length },
+    { key: 'documents', label: 'Docs', count: documentRequestsData?.requests.length },
   ];
 
   return (
@@ -115,12 +202,22 @@ export default function NoticeDetailScreen() {
           {activeTab === 'comments' && (
             <CommentsTab comments={commentsData?.comments || []} noticeId={noticeId} />
           )}
+          {activeTab === 'documents' && (
+            <DocumentRequestsTab
+              requests={documentRequestsData?.requests || []}
+              summary={documentRequestsData?.summary}
+              noticeId={noticeId}
+            />
+          )}
         </View>
 
         {/* Attachments Summary */}
         {attachments && attachments.length > 0 && (
           <View style={styles.section}>
-            <TouchableOpacity style={styles.attachmentsSummary}>
+            <TouchableOpacity
+              style={styles.attachmentsSummary}
+              onPress={() => setShowAttachmentsModal(true)}
+            >
               <Paperclip size={20} color={COLORS.gray[500]} />
               <Text style={styles.attachmentsText}>
                 {attachments.length} attachment{attachments.length > 1 ? 's' : ''}
@@ -134,18 +231,110 @@ export default function NoticeDetailScreen() {
       </ScrollView>
 
       {/* Bottom Action */}
-      {workflow && workflow.stages.length > 0 && (
+      {workflow && workflow.availableTransitions && workflow.availableTransitions.length > 0 && (
         <View style={styles.bottomAction}>
           <Button
             title="Advance Workflow"
-            onPress={() => {
-              // Would show transition options
-            }}
+            onPress={() => setShowTransitionModal(true)}
             icon={<Play size={18} color={COLORS.white} />}
             fullWidth
+            disabled={advanceWorkflowMutation.isPending}
           />
         </View>
       )}
+
+      {/* Workflow Transition Modal */}
+      <Modal
+        visible={showTransitionModal}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setShowTransitionModal(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            <Text style={styles.modalTitle}>Select Transition</Text>
+            <Text style={styles.modalSubtitle}>Choose an action to advance the workflow</Text>
+
+            {workflow?.availableTransitions?.map((transition) => (
+              <TouchableOpacity
+                key={transition.key}
+                style={styles.transitionOption}
+                onPress={() => handleAdvanceWorkflow(transition.key, transition.label)}
+                disabled={advanceWorkflowMutation.isPending}
+              >
+                <View style={styles.transitionContent}>
+                  <Text style={styles.transitionLabel}>{transition.label}</Text>
+                  {transition.description && (
+                    <Text style={styles.transitionDescription}>{transition.description}</Text>
+                  )}
+                </View>
+                <ChevronRight size={20} color={COLORS.gray[400]} />
+              </TouchableOpacity>
+            ))}
+
+            <TouchableOpacity
+              style={styles.cancelButton}
+              onPress={() => setShowTransitionModal(false)}
+            >
+              <Text style={styles.cancelButtonText}>Cancel</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
+
+      {/* Attachments Modal */}
+      <Modal
+        visible={showAttachmentsModal}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setShowAttachmentsModal(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.attachmentsModalContent}>
+            <View style={styles.attachmentsModalHeader}>
+              <Text style={styles.modalTitle}>Attachments</Text>
+              <TouchableOpacity onPress={() => setShowAttachmentsModal(false)}>
+                <X size={24} color={COLORS.gray[500]} />
+              </TouchableOpacity>
+            </View>
+
+            <ScrollView style={styles.attachmentsList}>
+              {attachments?.map((attachment) => (
+                <TouchableOpacity
+                  key={attachment.id}
+                  style={styles.attachmentItem}
+                  onPress={() => handleOpenAttachment(attachment)}
+                  disabled={downloadingAttachment === attachment.id}
+                >
+                  <View style={styles.attachmentIcon}>
+                    {getFileIcon(attachment.fileName)}
+                  </View>
+                  <View style={styles.attachmentInfo}>
+                    <Text style={styles.attachmentName} numberOfLines={1}>
+                      {attachment.fileName}
+                    </Text>
+                    <Text style={styles.attachmentSize}>
+                      {formatFileSize(attachment.fileSize)}
+                    </Text>
+                  </View>
+                  {downloadingAttachment === attachment.id ? (
+                    <ActivityIndicator size="small" color={COLORS.primary} />
+                  ) : (
+                    <Download size={20} color={COLORS.primary} />
+                  )}
+                </TouchableOpacity>
+              ))}
+            </ScrollView>
+
+            <TouchableOpacity
+              style={styles.attachmentsCloseButton}
+              onPress={() => setShowAttachmentsModal(false)}
+            >
+              <Text style={styles.attachmentsCloseText}>Close</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 }
@@ -366,99 +555,520 @@ function AnalysisTab({ notice }: { notice: NoticeDetailDto }) {
 
 // Tasks Tab
 function TasksTab({ tasks, noticeId }: { tasks: TaskDto[]; noticeId: string }) {
-  if (tasks.length === 0) {
-    return <EmptyState type="tasks" />;
-  }
+  const [showCreateModal, setShowCreateModal] = useState(false);
+  const [newTaskTitle, setNewTaskTitle] = useState('');
+  const [newTaskDescription, setNewTaskDescription] = useState('');
+  const [newTaskPriority, setNewTaskPriority] = useState<'low' | 'medium' | 'high' | 'critical'>('medium');
+  const createTask = useCreateTask();
+
+  const handleCreateTask = useCallback(async () => {
+    if (!newTaskTitle.trim()) return;
+
+    try {
+      await createTask.mutateAsync({
+        noticeId,
+        title: newTaskTitle.trim(),
+        description: newTaskDescription.trim() || undefined,
+        priority: newTaskPriority,
+      });
+      setNewTaskTitle('');
+      setNewTaskDescription('');
+      setNewTaskPriority('medium');
+      setShowCreateModal(false);
+      Alert.alert('Success', 'Task created successfully');
+    } catch (error) {
+      Alert.alert('Error', 'Failed to create task. Please try again.');
+    }
+  }, [newTaskTitle, newTaskDescription, newTaskPriority, noticeId, createTask]);
+
+  const priorities: Array<{ value: 'low' | 'medium' | 'high' | 'critical'; label: string }> = [
+    { value: 'low', label: 'Low' },
+    { value: 'medium', label: 'Medium' },
+    { value: 'high', label: 'High' },
+    { value: 'critical', label: 'Critical' },
+  ];
 
   return (
     <View>
-      {tasks.map((task) => (
-        <View key={task.id} style={styles.taskItem}>
-          <View
-            style={[
-              styles.taskPriority,
-              { backgroundColor: RISK_COLORS[task.priority] || COLORS.gray[400] },
-            ]}
-          />
-          <View style={styles.taskContent}>
-            <Text style={styles.taskTitle}>{task.title}</Text>
-            <View style={styles.taskMeta}>
-              {task.assignees.length > 0 && (
-                <View style={styles.assignees}>
-                  <User size={12} color={COLORS.gray[400]} />
-                  <Text style={styles.assigneeText}>
-                    {task.assignees.map((a) => a.name).join(', ')}
-                  </Text>
+      {/* Add Task Button */}
+      <TouchableOpacity
+        style={styles.addTaskButton}
+        onPress={() => setShowCreateModal(true)}
+      >
+        <Plus size={18} color={COLORS.primary} />
+        <Text style={styles.addTaskButtonText}>Add Task</Text>
+      </TouchableOpacity>
+
+      {tasks.length === 0 ? (
+        <EmptyState type="tasks" />
+      ) : (
+        <View>
+          {tasks.map((task) => (
+            <View key={task.id} style={styles.taskItem}>
+              <View
+                style={[
+                  styles.taskPriority,
+                  { backgroundColor: RISK_COLORS[task.priority] || COLORS.gray[400] },
+                ]}
+              />
+              <View style={styles.taskContent}>
+                <Text style={styles.taskTitle}>{task.title}</Text>
+                <View style={styles.taskMeta}>
+                  {task.assignees.length > 0 && (
+                    <View style={styles.assignees}>
+                      <User size={12} color={COLORS.gray[400]} />
+                      <Text style={styles.assigneeText}>
+                        {task.assignees.map((a) => a.name).join(', ')}
+                      </Text>
+                    </View>
+                  )}
+                  {task.dueDate && (
+                    <View style={styles.dueDate}>
+                      <Clock size={12} color={task.isOverdue ? COLORS.error : COLORS.gray[400]} />
+                      <Text
+                        style={[styles.dueDateText, task.isOverdue && { color: COLORS.error }]}
+                      >
+                        {new Date(task.dueDate).toLocaleDateString()}
+                      </Text>
+                    </View>
+                  )}
                 </View>
-              )}
-              {task.dueDate && (
-                <View style={styles.dueDate}>
-                  <Clock size={12} color={task.isOverdue ? COLORS.error : COLORS.gray[400]} />
+              </View>
+              <View
+                style={[
+                  styles.statusBadge,
+                  { backgroundColor: STATUS_COLORS[task.status] || COLORS.gray[400] },
+                ]}
+              >
+                <Text style={styles.statusText}>{task.status.replace('_', ' ')}</Text>
+              </View>
+            </View>
+          ))}
+        </View>
+      )}
+
+      {/* Create Task Modal */}
+      <Modal
+        visible={showCreateModal}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setShowCreateModal(false)}
+      >
+        <KeyboardAvoidingView
+          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+          style={styles.modalOverlay}
+        >
+          <View style={styles.createTaskModal}>
+            <View style={styles.createTaskHeader}>
+              <Text style={styles.createTaskTitle}>Create Task</Text>
+              <TouchableOpacity onPress={() => setShowCreateModal(false)}>
+                <X size={24} color={COLORS.gray[500]} />
+              </TouchableOpacity>
+            </View>
+
+            <TextInput
+              style={styles.taskTitleInput}
+              placeholder="Task title"
+              placeholderTextColor={COLORS.gray[400]}
+              value={newTaskTitle}
+              onChangeText={setNewTaskTitle}
+              maxLength={200}
+            />
+
+            <TextInput
+              style={styles.taskDescriptionInput}
+              placeholder="Description (optional)"
+              placeholderTextColor={COLORS.gray[400]}
+              value={newTaskDescription}
+              onChangeText={setNewTaskDescription}
+              multiline
+              numberOfLines={3}
+              maxLength={2000}
+            />
+
+            <Text style={styles.priorityLabel}>Priority</Text>
+            <View style={styles.prioritySelector}>
+              {priorities.map((p) => (
+                <TouchableOpacity
+                  key={p.value}
+                  style={[
+                    styles.priorityOption,
+                    newTaskPriority === p.value && styles.priorityOptionActive,
+                    { borderColor: RISK_COLORS[p.value] || COLORS.gray[300] },
+                    newTaskPriority === p.value && {
+                      backgroundColor: RISK_COLORS[p.value] || COLORS.gray[300],
+                    },
+                  ]}
+                  onPress={() => setNewTaskPriority(p.value)}
+                >
                   <Text
-                    style={[styles.dueDateText, task.isOverdue && { color: COLORS.error }]}
+                    style={[
+                      styles.priorityOptionText,
+                      newTaskPriority === p.value && styles.priorityOptionTextActive,
+                    ]}
                   >
-                    {new Date(task.dueDate).toLocaleDateString()}
+                    {p.label}
                   </Text>
-                </View>
-              )}
+                </TouchableOpacity>
+              ))}
+            </View>
+
+            <View style={styles.createTaskActions}>
+              <TouchableOpacity
+                style={styles.createTaskCancelButton}
+                onPress={() => setShowCreateModal(false)}
+              >
+                <Text style={styles.createTaskCancelText}>Cancel</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[
+                  styles.createTaskSubmitButton,
+                  (!newTaskTitle.trim() || createTask.isPending) && styles.createTaskSubmitDisabled,
+                ]}
+                onPress={handleCreateTask}
+                disabled={!newTaskTitle.trim() || createTask.isPending}
+              >
+                <Text style={styles.createTaskSubmitText}>
+                  {createTask.isPending ? 'Creating...' : 'Create Task'}
+                </Text>
+              </TouchableOpacity>
             </View>
           </View>
-          <View
-            style={[
-              styles.statusBadge,
-              { backgroundColor: STATUS_COLORS[task.status] || COLORS.gray[400] },
-            ]}
-          >
-            <Text style={styles.statusText}>{task.status.replace('_', ' ')}</Text>
-          </View>
-        </View>
-      ))}
+        </KeyboardAvoidingView>
+      </Modal>
     </View>
   );
 }
 
 // Comments Tab
 function CommentsTab({ comments, noticeId }: { comments: CommentResponseDto[]; noticeId: string }) {
-  if (comments.length === 0) {
+  const [newComment, setNewComment] = useState('');
+  const createComment = useCreateComment();
+
+  const handleSubmitComment = useCallback(async () => {
+    if (!newComment.trim()) return;
+
+    try {
+      await createComment.mutateAsync({
+        noticeId,
+        content: newComment.trim(),
+      });
+      setNewComment('');
+    } catch (error) {
+      Alert.alert('Error', 'Failed to post comment. Please try again.');
+    }
+  }, [newComment, noticeId, createComment]);
+
+  return (
+    <View style={styles.commentsContainer}>
+      {comments.length === 0 ? (
+        <EmptyState
+          title="No Comments Yet"
+          message="Start the conversation by adding a comment."
+          icon={<MessageSquare size={48} color={COLORS.gray[400]} />}
+        />
+      ) : (
+        <View style={styles.commentsList}>
+          {comments.map((comment) => (
+            <View key={comment.id} style={styles.commentItem}>
+              <View style={styles.commentAvatar}>
+                <Text style={styles.commentAvatarText}>
+                  {comment.author.name.charAt(0).toUpperCase()}
+                </Text>
+              </View>
+              <View style={styles.commentContent}>
+                <View style={styles.commentHeader}>
+                  <Text style={styles.commentAuthor}>{comment.author.name}</Text>
+                  <Text style={styles.commentTime}>
+                    {new Date(comment.createdAt).toLocaleDateString()}
+                  </Text>
+                </View>
+                <Text style={styles.commentText}>{comment.content}</Text>
+                {comment.reactions.length > 0 && (
+                  <View style={styles.reactions}>
+                    {comment.reactions.map((reaction) => (
+                      <View key={reaction.emoji} style={styles.reaction}>
+                        <Text style={styles.reactionEmoji}>{reaction.emoji}</Text>
+                        <Text style={styles.reactionCount}>{reaction.count}</Text>
+                      </View>
+                    ))}
+                  </View>
+                )}
+              </View>
+            </View>
+          ))}
+        </View>
+      )}
+
+      {/* Comment Input */}
+      <View style={styles.commentInputContainer}>
+        <TextInput
+          style={styles.commentInput}
+          placeholder="Write a comment..."
+          placeholderTextColor={COLORS.gray[400]}
+          value={newComment}
+          onChangeText={setNewComment}
+          multiline
+          maxLength={2000}
+        />
+        <TouchableOpacity
+          style={[
+            styles.sendButton,
+            (!newComment.trim() || createComment.isPending) && styles.sendButtonDisabled,
+          ]}
+          onPress={handleSubmitComment}
+          disabled={!newComment.trim() || createComment.isPending}
+        >
+          <Send size={20} color={newComment.trim() ? COLORS.white : COLORS.gray[400]} />
+        </TouchableOpacity>
+      </View>
+    </View>
+  );
+}
+
+// Document Requests Tab
+function DocumentRequestsTab({
+  requests,
+  summary,
+  noticeId,
+}: {
+  requests: DocumentRequestDto[];
+  summary?: { total: number; pending: number; submitted: number; fulfilled: number; overdue: number };
+  noticeId: string;
+}) {
+  const [selectedRequest, setSelectedRequest] = useState<DocumentRequestDto | null>(null);
+  const [showUploadModal, setShowUploadModal] = useState(false);
+  const [uploadNote, setUploadNote] = useState('');
+  const submitDocument = useSubmitDocument();
+
+  const handlePickDocument = async () => {
+    try {
+      const result = await DocumentPicker.getDocumentAsync({
+        type: selectedRequest?.acceptedFormats?.map(f => `application/${f}`) || ['*/*'],
+        copyToCacheDirectory: true,
+      });
+
+      if (!result.canceled && result.assets && result.assets.length > 0) {
+        const file = result.assets[0];
+        submitDocument.mutate(
+          {
+            requestId: selectedRequest!.id,
+            file: {
+              uri: file.uri,
+              type: file.mimeType || 'application/octet-stream',
+              name: file.name,
+            },
+            note: uploadNote.trim() || undefined,
+          },
+          {
+            onSuccess: () => {
+              Alert.alert('Success', 'Document uploaded successfully');
+              setShowUploadModal(false);
+              setSelectedRequest(null);
+              setUploadNote('');
+            },
+            onError: (error) => {
+              Alert.alert('Error', error.message || 'Failed to upload document');
+            },
+          }
+        );
+      }
+    } catch (error) {
+      Alert.alert('Error', 'Failed to pick document');
+    }
+  };
+
+  const getStatusColor = (status: DocumentRequestStatus) => {
+    switch (status) {
+      case 'pending': return COLORS.warning;
+      case 'submitted': return COLORS.info;
+      case 'reviewing': return COLORS.primary;
+      case 'fulfilled': return COLORS.success;
+      case 'resubmit_needed': return COLORS.error;
+      case 'cancelled': return COLORS.gray[400];
+      default: return COLORS.gray[400];
+    }
+  };
+
+  const getStatusLabel = (status: DocumentRequestStatus) => {
+    switch (status) {
+      case 'pending': return 'Pending';
+      case 'submitted': return 'Submitted';
+      case 'reviewing': return 'Reviewing';
+      case 'fulfilled': return 'Fulfilled';
+      case 'resubmit_needed': return 'Resubmit';
+      case 'cancelled': return 'Cancelled';
+      default: return status;
+    }
+  };
+
+  const formatDate = (dateStr: string) => {
+    return new Date(dateStr).toLocaleDateString('en-US', {
+      month: 'short',
+      day: 'numeric',
+      year: 'numeric',
+    });
+  };
+
+  if (requests.length === 0) {
     return (
       <EmptyState
-        title="No Comments Yet"
-        message="Start the conversation by adding a comment."
-        icon={<MessageSquare size={48} color={COLORS.gray[400]} />}
+        title="No Document Requests"
+        message="No documents have been requested for this notice."
+        icon={<FileText size={48} color={COLORS.gray[400]} />}
       />
     );
   }
 
   return (
     <View>
-      {comments.map((comment) => (
-        <View key={comment.id} style={styles.commentItem}>
-          <View style={styles.commentAvatar}>
-            <Text style={styles.commentAvatarText}>
-              {comment.author.name.charAt(0).toUpperCase()}
+      {/* Summary badges */}
+      {summary && (
+        <View style={styles.docSummary}>
+          <View style={[styles.docSummaryBadge, { backgroundColor: COLORS.warning + '20' }]}>
+            <Text style={[styles.docSummaryText, { color: COLORS.warning }]}>
+              {summary.pending} Pending
             </Text>
           </View>
-          <View style={styles.commentContent}>
-            <View style={styles.commentHeader}>
-              <Text style={styles.commentAuthor}>{comment.author.name}</Text>
-              <Text style={styles.commentTime}>
-                {new Date(comment.createdAt).toLocaleDateString()}
+          <View style={[styles.docSummaryBadge, { backgroundColor: COLORS.success + '20' }]}>
+            <Text style={[styles.docSummaryText, { color: COLORS.success }]}>
+              {summary.fulfilled} Done
+            </Text>
+          </View>
+          {summary.overdue > 0 && (
+            <View style={[styles.docSummaryBadge, { backgroundColor: COLORS.error + '20' }]}>
+              <Text style={[styles.docSummaryText, { color: COLORS.error }]}>
+                {summary.overdue} Overdue
               </Text>
             </View>
-            <Text style={styles.commentText}>{comment.content}</Text>
-            {comment.reactions.length > 0 && (
-              <View style={styles.reactions}>
-                {comment.reactions.map((reaction) => (
-                  <View key={reaction.emoji} style={styles.reaction}>
-                    <Text style={styles.reactionEmoji}>{reaction.emoji}</Text>
-                    <Text style={styles.reactionCount}>{reaction.count}</Text>
-                  </View>
-                ))}
+          )}
+        </View>
+      )}
+
+      {/* Request list */}
+      {requests.map((request) => (
+        <TouchableOpacity
+          key={request.id}
+          style={styles.docRequestItem}
+          onPress={() => {
+            if (request.status === 'pending' || request.status === 'resubmit_needed') {
+              setSelectedRequest(request);
+              setShowUploadModal(true);
+            }
+          }}
+        >
+          <View style={styles.docRequestHeader}>
+            <View style={[styles.docRequestStatus, { backgroundColor: getStatusColor(request.status) }]}>
+              <Text style={styles.docRequestStatusText}>{getStatusLabel(request.status)}</Text>
+            </View>
+            {request.isOverdue && (
+              <View style={styles.overdueTag}>
+                <AlertCircle size={12} color={COLORS.error} />
+                <Text style={styles.overdueText}>Overdue</Text>
               </View>
             )}
           </View>
-        </View>
+
+          <Text style={styles.docRequestTitle}>{request.title}</Text>
+          <Text style={styles.docRequestDescription} numberOfLines={2}>
+            {request.description}
+          </Text>
+
+          <View style={styles.docRequestMeta}>
+            <View style={styles.docRequestMetaItem}>
+              <Clock size={14} color={COLORS.gray[500]} />
+              <Text style={styles.docRequestMetaText}>Due: {formatDate(request.dueDate)}</Text>
+            </View>
+            <View style={styles.docRequestMetaItem}>
+              <User size={14} color={COLORS.gray[500]} />
+              <Text style={styles.docRequestMetaText}>From: {request.requestedFrom.name}</Text>
+            </View>
+          </View>
+
+          {request.documents.length > 0 && (
+            <View style={styles.docRequestDocs}>
+              <Paperclip size={14} color={COLORS.gray[500]} />
+              <Text style={styles.docRequestDocsText}>
+                {request.documents.length} document{request.documents.length > 1 ? 's' : ''} submitted
+              </Text>
+            </View>
+          )}
+
+          {(request.status === 'pending' || request.status === 'resubmit_needed') && (
+            <View style={styles.docRequestAction}>
+              <Text style={styles.docRequestActionText}>Tap to upload document</Text>
+              <ChevronRight size={16} color={COLORS.primary} />
+            </View>
+          )}
+        </TouchableOpacity>
       ))}
+
+      {/* Upload Modal */}
+      <Modal
+        visible={showUploadModal}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setShowUploadModal(false)}
+      >
+        <KeyboardAvoidingView
+          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+          style={styles.modalOverlay}
+        >
+          <View style={styles.uploadModal}>
+            <View style={styles.uploadModalHeader}>
+              <Text style={styles.modalTitle}>Upload Document</Text>
+              <TouchableOpacity onPress={() => setShowUploadModal(false)}>
+                <X size={24} color={COLORS.gray[500]} />
+              </TouchableOpacity>
+            </View>
+
+            {selectedRequest && (
+              <>
+                <Text style={styles.uploadRequestTitle}>{selectedRequest.title}</Text>
+                <Text style={styles.uploadRequestDesc}>{selectedRequest.description}</Text>
+
+                {selectedRequest.acceptedFormats && selectedRequest.acceptedFormats.length > 0 && (
+                  <Text style={styles.acceptedFormats}>
+                    Accepted formats: {selectedRequest.acceptedFormats.join(', ')}
+                  </Text>
+                )}
+
+                <TextInput
+                  style={styles.uploadNote}
+                  placeholder="Add a note (optional)"
+                  placeholderTextColor={COLORS.gray[400]}
+                  value={uploadNote}
+                  onChangeText={setUploadNote}
+                  multiline
+                  numberOfLines={2}
+                />
+
+                <TouchableOpacity
+                  style={[styles.uploadButton, submitDocument.isPending && styles.uploadButtonDisabled]}
+                  onPress={handlePickDocument}
+                  disabled={submitDocument.isPending}
+                >
+                  {submitDocument.isPending ? (
+                    <ActivityIndicator size="small" color={COLORS.white} />
+                  ) : (
+                    <>
+                      <Download size={20} color={COLORS.white} />
+                      <Text style={styles.uploadButtonText}>Select & Upload Document</Text>
+                    </>
+                  )}
+                </TouchableOpacity>
+              </>
+            )}
+
+            <TouchableOpacity
+              style={styles.uploadCancelButton}
+              onPress={() => setShowUploadModal(false)}
+            >
+              <Text style={styles.uploadCancelText}>Cancel</Text>
+            </TouchableOpacity>
+          </View>
+        </KeyboardAvoidingView>
+      </Modal>
     </View>
   );
 }
@@ -864,5 +1474,449 @@ const styles = StyleSheet.create({
   reactionCount: {
     fontSize: FONT_SIZES.sm,
     color: COLORS.gray[600],
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    justifyContent: 'flex-end',
+  },
+  modalContent: {
+    backgroundColor: COLORS.white,
+    borderTopLeftRadius: BORDER_RADIUS.lg,
+    borderTopRightRadius: BORDER_RADIUS.lg,
+    padding: SPACING.lg,
+    paddingBottom: SPACING.xl,
+  },
+  modalTitle: {
+    fontSize: FONT_SIZES.lg,
+    fontWeight: '600',
+    color: COLORS.gray[900],
+    marginBottom: SPACING.xs,
+  },
+  modalSubtitle: {
+    fontSize: FONT_SIZES.md,
+    color: COLORS.gray[500],
+    marginBottom: SPACING.lg,
+  },
+  transitionOption: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: SPACING.md,
+    borderWidth: 1,
+    borderColor: COLORS.gray[200],
+    borderRadius: BORDER_RADIUS.md,
+    marginBottom: SPACING.sm,
+  },
+  transitionContent: {
+    flex: 1,
+  },
+  transitionLabel: {
+    fontSize: FONT_SIZES.md,
+    fontWeight: '500',
+    color: COLORS.gray[900],
+  },
+  transitionDescription: {
+    fontSize: FONT_SIZES.sm,
+    color: COLORS.gray[500],
+    marginTop: 2,
+  },
+  cancelButton: {
+    marginTop: SPACING.md,
+    padding: SPACING.md,
+    alignItems: 'center',
+  },
+  cancelButtonText: {
+    fontSize: FONT_SIZES.md,
+    color: COLORS.gray[500],
+    fontWeight: '500',
+  },
+  // Comment compose styles
+  commentsContainer: {
+    flex: 1,
+  },
+  commentsList: {
+    marginBottom: SPACING.md,
+  },
+  commentInputContainer: {
+    flexDirection: 'row',
+    alignItems: 'flex-end',
+    backgroundColor: COLORS.gray[50],
+    borderRadius: BORDER_RADIUS.lg,
+    paddingHorizontal: SPACING.sm,
+    paddingVertical: SPACING.xs,
+    marginTop: SPACING.md,
+  },
+  commentInput: {
+    flex: 1,
+    fontSize: FONT_SIZES.md,
+    color: COLORS.gray[900],
+    maxHeight: 100,
+    paddingVertical: SPACING.sm,
+    paddingHorizontal: SPACING.sm,
+  },
+  sendButton: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: COLORS.primary,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  sendButtonDisabled: {
+    backgroundColor: COLORS.gray[200],
+  },
+  // Task create styles
+  addTaskButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: SPACING.md,
+    backgroundColor: COLORS.gray[50],
+    borderRadius: BORDER_RADIUS.md,
+    borderWidth: 1,
+    borderColor: COLORS.primary,
+    borderStyle: 'dashed',
+    marginBottom: SPACING.md,
+    gap: SPACING.xs,
+  },
+  addTaskButtonText: {
+    fontSize: FONT_SIZES.md,
+    fontWeight: '500',
+    color: COLORS.primary,
+  },
+  createTaskModal: {
+    backgroundColor: COLORS.white,
+    borderTopLeftRadius: BORDER_RADIUS.xl,
+    borderTopRightRadius: BORDER_RADIUS.xl,
+    padding: SPACING.lg,
+    paddingBottom: SPACING.xxl,
+    maxHeight: '80%',
+  },
+  createTaskHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: SPACING.lg,
+  },
+  createTaskTitle: {
+    fontSize: FONT_SIZES.lg,
+    fontWeight: '600',
+    color: COLORS.gray[900],
+  },
+  taskTitleInput: {
+    backgroundColor: COLORS.gray[50],
+    borderRadius: BORDER_RADIUS.md,
+    paddingHorizontal: SPACING.md,
+    paddingVertical: SPACING.md,
+    fontSize: FONT_SIZES.md,
+    color: COLORS.gray[900],
+    marginBottom: SPACING.md,
+    borderWidth: 1,
+    borderColor: COLORS.gray[200],
+  },
+  taskDescriptionInput: {
+    backgroundColor: COLORS.gray[50],
+    borderRadius: BORDER_RADIUS.md,
+    paddingHorizontal: SPACING.md,
+    paddingVertical: SPACING.md,
+    fontSize: FONT_SIZES.md,
+    color: COLORS.gray[900],
+    marginBottom: SPACING.md,
+    minHeight: 80,
+    textAlignVertical: 'top',
+    borderWidth: 1,
+    borderColor: COLORS.gray[200],
+  },
+  priorityLabel: {
+    fontSize: FONT_SIZES.sm,
+    fontWeight: '500',
+    color: COLORS.gray[700],
+    marginBottom: SPACING.sm,
+  },
+  prioritySelector: {
+    flexDirection: 'row',
+    gap: SPACING.sm,
+    marginBottom: SPACING.lg,
+  },
+  priorityOption: {
+    flex: 1,
+    paddingVertical: SPACING.sm,
+    paddingHorizontal: SPACING.md,
+    borderRadius: BORDER_RADIUS.md,
+    borderWidth: 1.5,
+    alignItems: 'center',
+  },
+  priorityOptionActive: {
+    borderWidth: 1.5,
+  },
+  priorityOptionText: {
+    fontSize: FONT_SIZES.sm,
+    fontWeight: '500',
+    color: COLORS.gray[600],
+  },
+  priorityOptionTextActive: {
+    color: COLORS.white,
+  },
+  createTaskActions: {
+    flexDirection: 'row',
+    gap: SPACING.md,
+  },
+  createTaskCancelButton: {
+    flex: 1,
+    paddingVertical: SPACING.md,
+    borderRadius: BORDER_RADIUS.md,
+    backgroundColor: COLORS.gray[100],
+    alignItems: 'center',
+  },
+  createTaskCancelText: {
+    fontSize: FONT_SIZES.md,
+    fontWeight: '500',
+    color: COLORS.gray[600],
+  },
+  createTaskSubmitButton: {
+    flex: 1,
+    paddingVertical: SPACING.md,
+    borderRadius: BORDER_RADIUS.md,
+    backgroundColor: COLORS.primary,
+    alignItems: 'center',
+  },
+  createTaskSubmitDisabled: {
+    backgroundColor: COLORS.gray[300],
+  },
+  createTaskSubmitText: {
+    fontSize: FONT_SIZES.md,
+    fontWeight: '500',
+    color: COLORS.white,
+  },
+  // Attachments modal styles
+  attachmentsModalContent: {
+    backgroundColor: COLORS.white,
+    borderTopLeftRadius: BORDER_RADIUS.xl,
+    borderTopRightRadius: BORDER_RADIUS.xl,
+    padding: SPACING.lg,
+    paddingBottom: SPACING.xxl,
+    maxHeight: '70%',
+  },
+  attachmentsModalHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: SPACING.lg,
+  },
+  attachmentsList: {
+    maxHeight: 400,
+  },
+  attachmentItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: SPACING.md,
+    paddingHorizontal: SPACING.sm,
+    borderBottomWidth: 1,
+    borderBottomColor: COLORS.gray[100],
+    gap: SPACING.md,
+  },
+  attachmentIcon: {
+    width: 40,
+    height: 40,
+    borderRadius: BORDER_RADIUS.md,
+    backgroundColor: COLORS.gray[100],
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  attachmentInfo: {
+    flex: 1,
+  },
+  attachmentName: {
+    fontSize: FONT_SIZES.md,
+    fontWeight: '500',
+    color: COLORS.gray[900],
+  },
+  attachmentSize: {
+    fontSize: FONT_SIZES.sm,
+    color: COLORS.gray[500],
+    marginTop: 2,
+  },
+  attachmentsCloseButton: {
+    marginTop: SPACING.lg,
+    paddingVertical: SPACING.md,
+    backgroundColor: COLORS.gray[100],
+    borderRadius: BORDER_RADIUS.md,
+    alignItems: 'center',
+  },
+  attachmentsCloseText: {
+    fontSize: FONT_SIZES.md,
+    fontWeight: '500',
+    color: COLORS.gray[600],
+  },
+  // Document Requests styles
+  docSummary: {
+    flexDirection: 'row',
+    gap: SPACING.sm,
+    marginBottom: SPACING.md,
+    flexWrap: 'wrap',
+  },
+  docSummaryBadge: {
+    paddingHorizontal: SPACING.sm,
+    paddingVertical: SPACING.xs,
+    borderRadius: BORDER_RADIUS.sm,
+  },
+  docSummaryText: {
+    fontSize: FONT_SIZES.sm,
+    fontWeight: '500',
+  },
+  docRequestItem: {
+    backgroundColor: COLORS.white,
+    borderRadius: BORDER_RADIUS.md,
+    padding: SPACING.md,
+    marginBottom: SPACING.md,
+    borderWidth: 1,
+    borderColor: COLORS.gray[200],
+  },
+  docRequestHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: SPACING.sm,
+    marginBottom: SPACING.sm,
+  },
+  docRequestStatus: {
+    paddingHorizontal: SPACING.sm,
+    paddingVertical: 2,
+    borderRadius: BORDER_RADIUS.sm,
+  },
+  docRequestStatusText: {
+    fontSize: FONT_SIZES.xs,
+    fontWeight: '600',
+    color: COLORS.white,
+  },
+  overdueTag: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+  },
+  overdueText: {
+    fontSize: FONT_SIZES.xs,
+    color: COLORS.error,
+    fontWeight: '500',
+  },
+  docRequestTitle: {
+    fontSize: FONT_SIZES.md,
+    fontWeight: '600',
+    color: COLORS.gray[900],
+    marginBottom: SPACING.xs,
+  },
+  docRequestDescription: {
+    fontSize: FONT_SIZES.sm,
+    color: COLORS.gray[600],
+    marginBottom: SPACING.sm,
+  },
+  docRequestMeta: {
+    flexDirection: 'row',
+    gap: SPACING.md,
+    marginBottom: SPACING.sm,
+  },
+  docRequestMetaItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+  },
+  docRequestMetaText: {
+    fontSize: FONT_SIZES.sm,
+    color: COLORS.gray[500],
+  },
+  docRequestDocs: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    paddingTop: SPACING.sm,
+    borderTopWidth: 1,
+    borderTopColor: COLORS.gray[100],
+  },
+  docRequestDocsText: {
+    fontSize: FONT_SIZES.sm,
+    color: COLORS.gray[600],
+  },
+  docRequestAction: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: SPACING.xs,
+    marginTop: SPACING.sm,
+    paddingTop: SPACING.sm,
+    borderTopWidth: 1,
+    borderTopColor: COLORS.gray[100],
+  },
+  docRequestActionText: {
+    fontSize: FONT_SIZES.sm,
+    color: COLORS.primary,
+    fontWeight: '500',
+  },
+  uploadModal: {
+    backgroundColor: COLORS.white,
+    borderTopLeftRadius: BORDER_RADIUS.xl,
+    borderTopRightRadius: BORDER_RADIUS.xl,
+    padding: SPACING.lg,
+    paddingBottom: SPACING.xxl,
+  },
+  uploadModalHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: SPACING.lg,
+  },
+  uploadRequestTitle: {
+    fontSize: FONT_SIZES.lg,
+    fontWeight: '600',
+    color: COLORS.gray[900],
+    marginBottom: SPACING.xs,
+  },
+  uploadRequestDesc: {
+    fontSize: FONT_SIZES.sm,
+    color: COLORS.gray[600],
+    marginBottom: SPACING.md,
+  },
+  acceptedFormats: {
+    fontSize: FONT_SIZES.sm,
+    color: COLORS.gray[500],
+    fontStyle: 'italic',
+    marginBottom: SPACING.md,
+  },
+  uploadNote: {
+    backgroundColor: COLORS.gray[50],
+    borderRadius: BORDER_RADIUS.md,
+    paddingHorizontal: SPACING.md,
+    paddingVertical: SPACING.md,
+    fontSize: FONT_SIZES.md,
+    color: COLORS.gray[900],
+    marginBottom: SPACING.md,
+    minHeight: 60,
+    textAlignVertical: 'top',
+    borderWidth: 1,
+    borderColor: COLORS.gray[200],
+  },
+  uploadButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: SPACING.sm,
+    backgroundColor: COLORS.primary,
+    paddingVertical: SPACING.md,
+    borderRadius: BORDER_RADIUS.md,
+    marginBottom: SPACING.sm,
+  },
+  uploadButtonDisabled: {
+    backgroundColor: COLORS.gray[300],
+  },
+  uploadButtonText: {
+    fontSize: FONT_SIZES.md,
+    fontWeight: '600',
+    color: COLORS.white,
+  },
+  uploadCancelButton: {
+    paddingVertical: SPACING.md,
+    alignItems: 'center',
+  },
+  uploadCancelText: {
+    fontSize: FONT_SIZES.md,
+    color: COLORS.gray[500],
   },
 });

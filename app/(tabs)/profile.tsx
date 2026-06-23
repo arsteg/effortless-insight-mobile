@@ -26,7 +26,10 @@ import {
   HelpCircle,
   Info,
   Trash2,
+  ExternalLink,
 } from 'lucide-react-native';
+import * as WebBrowser from 'expo-web-browser';
+import * as Linking from 'expo-linking';
 import { useAuthStore, useOfflineStore } from '../../src/stores';
 import { Button, LoadingSpinner } from '../../src/components/common';
 import { COLORS, SPACING, FONT_SIZES, BORDER_RADIUS } from '../../src/utils/constants';
@@ -102,6 +105,84 @@ export default function ProfileScreen() {
     );
   };
 
+  const handleEditProfile = () => {
+    Alert.alert(
+      'Edit Profile',
+      'Profile editing is currently only available on the web app. Would you like to open it?',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Open Web App',
+          onPress: () => {
+            Linking.openURL('https://app.effortlessinsight.com/settings/profile');
+          },
+        },
+      ]
+    );
+  };
+
+  const handleSecurity = () => {
+    Alert.alert(
+      'Security Settings',
+      'Advanced security settings are available on the web app. Biometric login can be configured below.',
+      [{ text: 'OK' }]
+    );
+  };
+
+  const handleOrganization = () => {
+    Alert.alert(
+      'Organization',
+      `You are currently logged in to: ${user?.organizationName || 'Unknown Organization'}\n\nOrganization settings are available on the web app.`,
+      [
+        { text: 'OK' },
+        {
+          text: 'Open Web App',
+          onPress: () => {
+            Linking.openURL('https://app.effortlessinsight.com/settings/organization');
+          },
+        },
+      ]
+    );
+  };
+
+  const handleHelpCenter = async () => {
+    try {
+      await WebBrowser.openBrowserAsync('https://help.effortlessinsight.com');
+    } catch (error) {
+      Alert.alert('Error', 'Could not open help center');
+    }
+  };
+
+  const handleAbout = () => {
+    Alert.alert(
+      'About EffortlessInsight',
+      `Version: 1.0.0\nBuild: Mobile App\n\nEffortlessInsight helps you manage GST notices efficiently with AI-powered analysis and collaborative workflows.\n\n© 2024 EffortlessInsight. All rights reserved.`,
+      [
+        { text: 'OK' },
+        {
+          text: 'Visit Website',
+          onPress: () => Linking.openURL('https://effortlessinsight.com'),
+        },
+      ]
+    );
+  };
+
+  const handlePrivacyPolicy = async () => {
+    try {
+      await WebBrowser.openBrowserAsync('https://effortlessinsight.com/privacy');
+    } catch (error) {
+      Linking.openURL('https://effortlessinsight.com/privacy');
+    }
+  };
+
+  const handleTermsOfService = async () => {
+    try {
+      await WebBrowser.openBrowserAsync('https://effortlessinsight.com/terms');
+    } catch (error) {
+      Linking.openURL('https://effortlessinsight.com/terms');
+    }
+  };
+
   if (isLoading) {
     return <LoadingSpinner fullScreen />;
   }
@@ -132,18 +213,18 @@ export default function ProfileScreen() {
         <SettingItem
           icon={<User size={20} color={COLORS.gray[500]} />}
           label="Edit Profile"
-          onPress={() => {}}
+          onPress={handleEditProfile}
         />
         <SettingItem
           icon={<Shield size={20} color={COLORS.gray[500]} />}
           label="Security"
-          onPress={() => {}}
+          onPress={handleSecurity}
         />
         <SettingItem
           icon={<Globe size={20} color={COLORS.gray[500]} />}
           label="Organization"
           value={user?.organizationName}
-          onPress={() => {}}
+          onPress={handleOrganization}
         />
       </View>
 
@@ -202,13 +283,13 @@ export default function ProfileScreen() {
         <SettingItem
           icon={<HelpCircle size={20} color={COLORS.gray[500]} />}
           label="Help Center"
-          onPress={() => {}}
+          onPress={handleHelpCenter}
         />
         <SettingItem
           icon={<Info size={20} color={COLORS.gray[500]} />}
           label="About"
           value="v1.0.0"
-          onPress={() => {}}
+          onPress={handleAbout}
         />
       </View>
 
@@ -226,11 +307,11 @@ export default function ProfileScreen() {
       {/* Footer */}
       <View style={styles.footer}>
         <Text style={styles.footerText}>EffortlessInsight v1.0.0</Text>
-        <TouchableOpacity>
+        <TouchableOpacity onPress={handlePrivacyPolicy}>
           <Text style={styles.footerLink}>Privacy Policy</Text>
         </TouchableOpacity>
         <Text style={styles.footerDot}>•</Text>
-        <TouchableOpacity>
+        <TouchableOpacity onPress={handleTermsOfService}>
           <Text style={styles.footerLink}>Terms of Service</Text>
         </TouchableOpacity>
       </View>

@@ -88,6 +88,7 @@ export const COLORS = {
   success: '#10b981',
   warning: '#f59e0b',
   error: '#ef4444',
+  info: '#3b82f6',
   white: '#ffffff',
   black: '#000000',
   gray: {

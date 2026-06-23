@@ -62,8 +62,10 @@
         "origin": false
       },
       "eas": {
-        "projectId": "your-project-id"
-      }
-    }
+        "projectId": "effortless-insight-mobile"
+      },
+      "apiUrl": "https://api.effortlessinsight.com"
+    },
+    "owner": "effortlessinsight"
   }
 }

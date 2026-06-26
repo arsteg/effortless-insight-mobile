@@ -5,7 +5,8 @@
 
 import { useQuery, useMutation, useQueryClient, useInfiniteQuery } from '@tanstack/react-query';
 import { noticesApi } from '../services/api';
-import { cacheNotices } from '../services/storage/cache';
+import { cacheNotices, getCachedNotices } from '../services/storage/cache';
+import { useUIStore } from '../stores';
 import {
   NoticeQueryParams,
   NoticeDetailDto,
@@ -13,6 +14,12 @@ import {
   NoticeStatisticsDto,
   NoticeUploadResponse,
   WorkflowProgressDto,
+  ResponseDto,
+  SaveDraftRequest,
+  SubmitForReviewRequest,
+  ApproveResponseRequest,
+  RejectResponseRequest,
+  MarkSubmittedRequest,
 } from '../types';
 import { PAGINATION } from '../utils/constants';
 
@@ -26,27 +33,48 @@ export const noticeKeys = {
   statistics: () => [...noticeKeys.all, 'statistics'] as const,
   workflow: (id: string) => [...noticeKeys.all, 'workflow', id] as const,
   attachments: (id: string) => [...noticeKeys.all, 'attachments', id] as const,
+  responses: (id: string) => [...noticeKeys.all, 'responses', id] as const,
+  latestResponse: (id: string) => [...noticeKeys.all, 'latestResponse', id] as const,
 };
 
 /**
  * Get paginated notices with infinite scroll support
  */
 export function useNoticesInfinite(params: Omit<NoticeQueryParams, 'page'> = {}) {
+  const { isOnline } = useUIStore();
+
   return useInfiniteQuery({
     queryKey: noticeKeys.list(params),
     queryFn: async ({ pageParam = 1 }) => {
-      const response = await noticesApi.getNotices({
-        ...params,
-        page: pageParam,
-        pageSize: PAGINATION.DEFAULT_PAGE_SIZE,
-      });
+      try {
+        const response = await noticesApi.getNotices({
+          ...params,
+          page: pageParam,
+          pageSize: PAGINATION.DEFAULT_PAGE_SIZE,
+        });
 
-      // Cache first page
-      if (pageParam === 1) {
-        await cacheNotices(response.notices);
+        // Cache first page
+        if (pageParam === 1) {
+          await cacheNotices(response.notices);
+        }
+
+        return response;
+      } catch (error) {
+        // Fallback to cached data when offline or on network error (first page only)
+        if (pageParam === 1) {
+          const cachedNotices = await getCachedNotices();
+          if (cachedNotices && cachedNotices.length > 0) {
+            return {
+              notices: cachedNotices,
+              page: 1,
+              pageSize: cachedNotices.length,
+              totalCount: cachedNotices.length,
+              totalPages: 1,
+            };
+          }
+        }
+        throw error;
       }
-
-      return response;
     },
     initialPageParam: 1,
     getNextPageParam: (lastPage) => {
@@ -65,8 +93,23 @@ export function useNotices(params: NoticeQueryParams = {}) {
   return useQuery({
     queryKey: noticeKeys.list(params),
     queryFn: async () => {
-      const response = await noticesApi.getNotices(params);
-      return response;
+      try {
+        const response = await noticesApi.getNotices(params);
+        return response;
+      } catch (error) {
+        // Fallback to cached data when offline or on network error
+        const cachedNotices = await getCachedNotices();
+        if (cachedNotices && cachedNotices.length > 0) {
+          return {
+            notices: cachedNotices,
+            page: 1,
+            pageSize: cachedNotices.length,
+            totalCount: cachedNotices.length,
+            totalPages: 1,
+          };
+        }
+        throw error;
+      }
     },
   });
 }
@@ -267,5 +310,162 @@ export function useDeleteAttachment() {
     onSuccess: (_, { noticeId }) => {
       queryClient.invalidateQueries({ queryKey: noticeKeys.attachments(noticeId) });
     },
+  });
+}
+
+// ========== Response Hooks ==========
+
+/**
+ * Get all responses for a notice
+ */
+export function useResponses(noticeId: string, enabled = true) {
+  return useQuery({
+    queryKey: noticeKeys.responses(noticeId),
+    queryFn: () => noticesApi.getResponses(noticeId),
+    enabled: enabled && !!noticeId,
+  });
+}
+
+/**
+ * Get latest response for a notice
+ */
+export function useLatestResponse(noticeId: string, enabled = true) {
+  return useQuery({
+    queryKey: noticeKeys.latestResponse(noticeId),
+    queryFn: () => noticesApi.getLatestResponse(noticeId),
+    enabled: enabled && !!noticeId,
+  });
+}
+
+/**
+ * Save draft response mutation
+ */
+export function useSaveDraft() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: ({ noticeId, data }: { noticeId: string; data: SaveDraftRequest }) =>
+      noticesApi.saveDraft(noticeId, data),
+    onSuccess: (_, { noticeId }) => {
+      queryClient.invalidateQueries({ queryKey: noticeKeys.responses(noticeId) });
+      queryClient.invalidateQueries({ queryKey: noticeKeys.latestResponse(noticeId) });
+    },
+  });
+}
+
+/**
+ * Submit response for review mutation
+ */
+export function useSubmitForReview() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: ({
+      noticeId,
+      responseId,
+      data,
+    }: {
+      noticeId: string;
+      responseId: string;
+      data?: SubmitForReviewRequest;
+    }) => noticesApi.submitForReview(noticeId, responseId, data),
+    onSuccess: (_, { noticeId }) => {
+      queryClient.invalidateQueries({ queryKey: noticeKeys.responses(noticeId) });
+      queryClient.invalidateQueries({ queryKey: noticeKeys.latestResponse(noticeId) });
+      queryClient.invalidateQueries({ queryKey: noticeKeys.detail(noticeId) });
+    },
+  });
+}
+
+/**
+ * Approve response mutation
+ */
+export function useApproveResponse() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: ({
+      noticeId,
+      responseId,
+      data,
+    }: {
+      noticeId: string;
+      responseId: string;
+      data?: ApproveResponseRequest;
+    }) => noticesApi.approveResponse(noticeId, responseId, data),
+    onSuccess: (_, { noticeId }) => {
+      queryClient.invalidateQueries({ queryKey: noticeKeys.responses(noticeId) });
+      queryClient.invalidateQueries({ queryKey: noticeKeys.latestResponse(noticeId) });
+      queryClient.invalidateQueries({ queryKey: noticeKeys.detail(noticeId) });
+    },
+  });
+}
+
+/**
+ * Reject response mutation
+ */
+export function useRejectResponse() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: ({
+      noticeId,
+      responseId,
+      data,
+    }: {
+      noticeId: string;
+      responseId: string;
+      data: RejectResponseRequest;
+    }) => noticesApi.rejectResponse(noticeId, responseId, data),
+    onSuccess: (_, { noticeId }) => {
+      queryClient.invalidateQueries({ queryKey: noticeKeys.responses(noticeId) });
+      queryClient.invalidateQueries({ queryKey: noticeKeys.latestResponse(noticeId) });
+    },
+  });
+}
+
+/**
+ * Mark response as submitted to authority
+ */
+export function useMarkSubmitted() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: ({
+      noticeId,
+      responseId,
+      data,
+    }: {
+      noticeId: string;
+      responseId: string;
+      data?: MarkSubmittedRequest;
+    }) => noticesApi.markSubmitted(noticeId, responseId, data),
+    onSuccess: (_, { noticeId }) => {
+      queryClient.invalidateQueries({ queryKey: noticeKeys.responses(noticeId) });
+      queryClient.invalidateQueries({ queryKey: noticeKeys.latestResponse(noticeId) });
+      queryClient.invalidateQueries({ queryKey: noticeKeys.detail(noticeId) });
+      queryClient.invalidateQueries({ queryKey: noticeKeys.lists() });
+    },
+  });
+}
+
+// ========== Download Hooks ==========
+
+/**
+ * Get notice download URL (original PDF)
+ */
+export function useNoticeDownloadUrl(noticeId: string) {
+  return useMutation({
+    mutationFn: () => noticesApi.getDownloadUrl(noticeId),
+  });
+}
+
+/**
+ * Get attachment download URL
+ */
+export function useAttachmentDownloadUrl() {
+  return useMutation({
+    mutationFn: ({ noticeId, attachmentId }: { noticeId: string; attachmentId: string }) =>
+      noticesApi.getAttachmentDownloadUrl(noticeId, attachmentId),
   });
 }

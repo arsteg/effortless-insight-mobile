@@ -15,9 +15,9 @@ import {
   TextInput,
   KeyboardAvoidingView,
   Platform,
-  Linking,
   ActivityIndicator,
 } from 'react-native';
+import * as WebBrowser from 'expo-web-browser';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import {
   FileText,
@@ -37,14 +37,15 @@ import {
   File,
   Image,
 } from 'lucide-react-native';
-import { useNotice, useWorkflowProgress, useAttachments, useAdvanceWorkflow } from '../../src/hooks/useNotices';
-import { useNoticeTasks, useComments, useCreateComment, useCreateTask, useDocumentRequests, useSubmitDocument } from '../../src/hooks/useTasks';
+import { useNotice, useWorkflowProgress, useAttachments, useAdvanceWorkflow, useLatestResponse, useSaveDraft, useSubmitForReview, useApproveResponse, useMarkSubmitted, useNoticeDownloadUrl, useAttachmentDownloadUrl } from '../../src/hooks/useNotices';
+import { useNoticeTasks, useComments, useCreateComment, useCreateTask, useDocumentRequests, useSubmitDocument, useNoticeActivity } from '../../src/hooks/useTasks';
+import { useTranslation } from '../../src/hooks';
 import * as DocumentPicker from 'expo-document-picker';
 import { LoadingSpinner, Button, EmptyState } from '../../src/components/common';
 import { COLORS, SPACING, FONT_SIZES, BORDER_RADIUS, RISK_COLORS, STATUS_COLORS } from '../../src/utils/constants';
-import { NoticeDetailDto, TaskDto, CommentResponseDto, DocumentRequestDto, DocumentRequestStatus } from '../../src/types';
+import { NoticeDetailDto, TaskDto, CommentResponseDto, DocumentRequestDto, DocumentRequestStatus, ResponseDto, NoticeResponseStatus, ActivityDto, CommentVisibility } from '../../src/types';
 
-type TabType = 'overview' | 'analysis' | 'tasks' | 'comments' | 'documents';
+type TabType = 'overview' | 'analysis' | 'response' | 'tasks' | 'comments' | 'documents' | 'activity';
 
 export default function NoticeDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
@@ -54,16 +55,21 @@ export default function NoticeDetailScreen() {
   const [showTransitionModal, setShowTransitionModal] = useState(false);
   const [showAttachmentsModal, setShowAttachmentsModal] = useState(false);
   const [downloadingAttachment, setDownloadingAttachment] = useState<string | null>(null);
+  const [isViewingPdf, setIsViewingPdf] = useState(false);
 
   // Ensure id is defined
   const noticeId = id ?? '';
 
   const { data: notice, isLoading, refetch: refetchNotice } = useNotice(noticeId);
+  const noticeDownloadUrl = useNoticeDownloadUrl(noticeId);
+  const attachmentDownloadUrl = useAttachmentDownloadUrl();
   const { data: workflow, refetch: refetchWorkflow } = useWorkflowProgress(noticeId);
   const { data: tasksData, refetch: refetchTasks } = useNoticeTasks(noticeId);
   const { data: commentsData, refetch: refetchComments } = useComments(noticeId);
   const { data: attachments, refetch: refetchAttachments } = useAttachments(noticeId);
   const { data: documentRequestsData, refetch: refetchDocRequests } = useDocumentRequests(noticeId);
+  const { data: latestResponse, refetch: refetchResponse } = useLatestResponse(noticeId);
+  const { data: activityData, refetch: refetchActivity, fetchNextPage: fetchNextActivity, hasNextPage: hasMoreActivity } = useNoticeActivity(noticeId);
 
   const advanceWorkflowMutation = useAdvanceWorkflow();
 
@@ -76,6 +82,8 @@ export default function NoticeDetailScreen() {
       refetchComments(),
       refetchAttachments(),
       refetchDocRequests(),
+      refetchResponse(),
+      refetchActivity(),
     ]);
     setRefreshing(false);
   };
@@ -107,19 +115,41 @@ export default function NoticeDetailScreen() {
     );
   };
 
-  const handleOpenAttachment = async (attachment: { id: string; fileName: string; downloadUrl?: string }) => {
-    if (!attachment.downloadUrl) {
-      Alert.alert('Error', 'Download URL not available');
-      return;
+  const handleViewOriginalPdf = async () => {
+    setIsViewingPdf(true);
+    try {
+      const result = await noticeDownloadUrl.mutateAsync();
+      if (result.url) {
+        await WebBrowser.openBrowserAsync(result.url, {
+          presentationStyle: WebBrowser.WebBrowserPresentationStyle.FULL_SCREEN,
+          toolbarColor: COLORS.primary,
+          controlsColor: COLORS.white,
+        });
+      }
+    } catch (error) {
+      Alert.alert('Error', 'Failed to load the PDF. Please try again.');
+    } finally {
+      setIsViewingPdf(false);
     }
+  };
 
+  const handleOpenAttachment = async (attachment: { id: string; fileName: string; downloadUrl?: string }) => {
     setDownloadingAttachment(attachment.id);
     try {
-      const supported = await Linking.canOpenURL(attachment.downloadUrl);
-      if (supported) {
-        await Linking.openURL(attachment.downloadUrl);
+      // Get fresh download URL
+      const result = await attachmentDownloadUrl.mutateAsync({
+        noticeId,
+        attachmentId: attachment.id,
+      });
+
+      if (result.url) {
+        await WebBrowser.openBrowserAsync(result.url, {
+          presentationStyle: WebBrowser.WebBrowserPresentationStyle.FULL_SCREEN,
+          toolbarColor: COLORS.primary,
+          controlsColor: COLORS.white,
+        });
       } else {
-        Alert.alert('Error', 'Cannot open this file type');
+        Alert.alert('Error', 'Download URL not available');
       }
     } catch (error) {
       Alert.alert('Error', 'Failed to open attachment');
@@ -153,9 +183,11 @@ export default function NoticeDetailScreen() {
   const tabs: { key: TabType; label: string; count?: number }[] = [
     { key: 'overview', label: 'Overview' },
     { key: 'analysis', label: 'Analysis' },
+    { key: 'response', label: 'Response' },
     { key: 'tasks', label: 'Tasks', count: tasksData?.tasks.length },
     { key: 'comments', label: 'Comments', count: commentsData?.comments.length },
     { key: 'documents', label: 'Docs', count: documentRequestsData?.requests.length },
+    { key: 'activity', label: 'Activity' },
   ];
 
   return (
@@ -171,7 +203,11 @@ export default function NoticeDetailScreen() {
         }
       >
         {/* Header Card */}
-        <NoticeHeader notice={notice} />
+        <NoticeHeader
+          notice={notice}
+          onViewPdf={handleViewOriginalPdf}
+          isViewingPdf={isViewingPdf}
+        />
 
         {/* Workflow Progress */}
         {workflow && <WorkflowProgress workflow={workflow} />}
@@ -196,6 +232,9 @@ export default function NoticeDetailScreen() {
         <View style={styles.tabContent}>
           {activeTab === 'overview' && <OverviewTab notice={notice} />}
           {activeTab === 'analysis' && <AnalysisTab notice={notice} />}
+          {activeTab === 'response' && (
+            <ResponseTab response={latestResponse} noticeId={noticeId} />
+          )}
           {activeTab === 'tasks' && (
             <TasksTab tasks={tasksData?.tasks || []} noticeId={noticeId} />
           )}
@@ -207,6 +246,13 @@ export default function NoticeDetailScreen() {
               requests={documentRequestsData?.requests || []}
               summary={documentRequestsData?.summary}
               noticeId={noticeId}
+            />
+          )}
+          {activeTab === 'activity' && (
+            <ActivityTab
+              activities={activityData?.pages?.flatMap(page => page.activities || []) || []}
+              hasMore={hasMoreActivity || false}
+              onLoadMore={fetchNextActivity}
             />
           )}
         </View>
@@ -340,7 +386,15 @@ export default function NoticeDetailScreen() {
 }
 
 // Notice Header Component
-function NoticeHeader({ notice }: { notice: NoticeDetailDto }) {
+function NoticeHeader({
+  notice,
+  onViewPdf,
+  isViewingPdf
+}: {
+  notice: NoticeDetailDto;
+  onViewPdf: () => void;
+  isViewingPdf: boolean;
+}) {
   const getRiskColor = (riskLevel?: string) => {
     if (!riskLevel) return COLORS.gray[400];
     return RISK_COLORS[riskLevel as keyof typeof RISK_COLORS] || COLORS.gray[400];
@@ -368,6 +422,22 @@ function NoticeHeader({ notice }: { notice: NoticeDetailDto }) {
           </View>
         )}
       </View>
+
+      {/* View Original PDF Button */}
+      <TouchableOpacity
+        style={styles.viewPdfButton}
+        onPress={onViewPdf}
+        disabled={isViewingPdf}
+      >
+        {isViewingPdf ? (
+          <ActivityIndicator size="small" color={COLORS.primary} />
+        ) : (
+          <>
+            <Eye size={18} color={COLORS.primary} />
+            <Text style={styles.viewPdfButtonText}>View Original Notice PDF</Text>
+          </>
+        )}
+      </TouchableOpacity>
 
       <View style={styles.headerStats}>
         <View style={styles.statItem}>
@@ -481,40 +551,45 @@ function OverviewTab({ notice }: { notice: NoticeDetailDto }) {
 
 // Analysis Tab
 function AnalysisTab({ notice }: { notice: NoticeDetailDto }) {
+  const { t, isHindi } = useTranslation();
   const report = notice.aiReport;
 
   if (!report) {
     return (
       <EmptyState
-        title="No Analysis Yet"
-        message="AI analysis is being processed. You'll be notified when it's ready."
+        title={t('analysis.noAnalysis')}
+        message={t('analysis.analysisProcessing')}
         icon={<FileText size={48} color={COLORS.gray[400]} />}
       />
     );
   }
 
+  // Get localized content - prefer Hindi if locale is Hindi and content available
+  const summary = isHindi && report.summaryHi ? report.summaryHi : report.summaryEn;
+  const plainExplanation = isHindi && report.plainHindi ? report.plainHindi : report.plainEnglish;
+
   return (
     <View>
       {/* Summary */}
-      {report.summaryEn && (
+      {summary && (
         <View style={styles.analysisSection}>
-          <Text style={styles.analysisSectionTitle}>Summary</Text>
-          <Text style={styles.analysisText}>{report.summaryEn}</Text>
+          <Text style={styles.analysisSectionTitle}>{t('analysis.summary')}</Text>
+          <Text style={styles.analysisText}>{summary}</Text>
         </View>
       )}
 
-      {/* Plain English Explanation */}
-      {report.plainEnglish && (
+      {/* Plain Language Explanation */}
+      {plainExplanation && (
         <View style={styles.analysisSection}>
-          <Text style={styles.analysisSectionTitle}>What This Means</Text>
-          <Text style={styles.analysisText}>{report.plainEnglish}</Text>
+          <Text style={styles.analysisSectionTitle}>{t('analysis.whatThisMeans')}</Text>
+          <Text style={styles.analysisText}>{plainExplanation}</Text>
         </View>
       )}
 
       {/* Action Items */}
       {report.actionItems && report.actionItems.length > 0 && (
         <View style={styles.analysisSection}>
-          <Text style={styles.analysisSectionTitle}>Action Items</Text>
+          <Text style={styles.analysisSectionTitle}>{t('analysis.actionItems')}</Text>
           {report.actionItems.map((item, index) => (
             <View key={index} style={styles.actionItem}>
               <View
@@ -535,20 +610,280 @@ function AnalysisTab({ notice }: { notice: NoticeDetailDto }) {
       {/* Required Documents */}
       {report.requiredDocuments && report.requiredDocuments.length > 0 && (
         <View style={styles.analysisSection}>
-          <Text style={styles.analysisSectionTitle}>Required Documents</Text>
+          <Text style={styles.analysisSectionTitle}>{t('analysis.requiredDocuments')}</Text>
           {report.requiredDocuments.map((doc, index) => (
             <View key={index} style={styles.documentItem}>
               <Paperclip size={16} color={COLORS.gray[500]} />
               <Text style={styles.documentText}>{doc.document}</Text>
               {doc.mandatory && (
                 <View style={styles.mandatoryBadge}>
-                  <Text style={styles.mandatoryText}>Required</Text>
+                  <Text style={styles.mandatoryText}>{t('analysis.required')}</Text>
                 </View>
               )}
             </View>
           ))}
         </View>
       )}
+    </View>
+  );
+}
+
+// Response Tab
+function ResponseTab({ response, noticeId }: { response: ResponseDto | null | undefined; noticeId: string }) {
+  const [draftContent, setDraftContent] = useState(response?.content || '');
+  const [isSaving, setIsSaving] = useState(false);
+  const [showSubmitModal, setShowSubmitModal] = useState(false);
+  const [submitNotes, setSubmitNotes] = useState('');
+
+  const saveDraft = useSaveDraft();
+  const submitForReview = useSubmitForReview();
+  const approveResponse = useApproveResponse();
+  const markSubmitted = useMarkSubmitted();
+
+  // Update draft content when response changes
+  React.useEffect(() => {
+    if (response?.content) {
+      setDraftContent(response.content);
+    }
+  }, [response?.content]);
+
+  const handleSaveDraft = useCallback(async () => {
+    if (!draftContent.trim()) return;
+
+    setIsSaving(true);
+    try {
+      await saveDraft.mutateAsync({
+        noticeId,
+        data: { content: draftContent.trim() },
+      });
+      Alert.alert('Success', 'Draft saved successfully');
+    } catch (error) {
+      Alert.alert('Error', 'Failed to save draft');
+    } finally {
+      setIsSaving(false);
+    }
+  }, [draftContent, noticeId, saveDraft]);
+
+  const handleSubmitForReview = async () => {
+    if (!response?.id) return;
+
+    try {
+      await submitForReview.mutateAsync({
+        noticeId,
+        responseId: response.id,
+        data: submitNotes ? { notes: submitNotes } : undefined,
+      });
+      setShowSubmitModal(false);
+      setSubmitNotes('');
+      Alert.alert('Success', 'Response submitted for review');
+    } catch (error) {
+      Alert.alert('Error', 'Failed to submit for review');
+    }
+  };
+
+  const handleApprove = async () => {
+    if (!response?.id) return;
+
+    Alert.alert(
+      'Approve Response',
+      'Are you sure you want to approve this response?',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Approve',
+          onPress: async () => {
+            try {
+              await approveResponse.mutateAsync({
+                noticeId,
+                responseId: response.id,
+              });
+              Alert.alert('Success', 'Response approved');
+            } catch (error) {
+              Alert.alert('Error', 'Failed to approve response');
+            }
+          },
+        },
+      ]
+    );
+  };
+
+  const handleMarkSubmitted = async () => {
+    if (!response?.id) return;
+
+    Alert.alert(
+      'Mark as Submitted',
+      'Mark this response as submitted to the authority?',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Confirm',
+          onPress: async () => {
+            try {
+              await markSubmitted.mutateAsync({
+                noticeId,
+                responseId: response.id,
+              });
+              Alert.alert('Success', 'Response marked as submitted');
+            } catch (error) {
+              Alert.alert('Error', 'Failed to mark as submitted');
+            }
+          },
+        },
+      ]
+    );
+  };
+
+  const getStatusColor = (status: NoticeResponseStatus) => {
+    switch (status) {
+      case 'draft': return COLORS.gray[500];
+      case 'pending_review': return COLORS.warning;
+      case 'approved': return COLORS.success;
+      case 'submitted': return COLORS.info;
+      case 'rejected': return COLORS.error;
+      default: return COLORS.gray[500];
+    }
+  };
+
+  const getStatusLabel = (status: NoticeResponseStatus) => {
+    switch (status) {
+      case 'draft': return 'Draft';
+      case 'pending_review': return 'Pending Review';
+      case 'approved': return 'Approved';
+      case 'submitted': return 'Submitted';
+      case 'rejected': return 'Rejected';
+      default: return status;
+    }
+  };
+
+  return (
+    <View style={styles.responseContainer}>
+      {/* Status Badge */}
+      {response && (
+        <View style={styles.responseHeader}>
+          <View style={[styles.responseStatusBadge, { backgroundColor: getStatusColor(response.status) }]}>
+            <Text style={styles.responseStatusText}>{getStatusLabel(response.status)}</Text>
+          </View>
+          {response.version > 1 && (
+            <Text style={styles.responseVersion}>Version {response.version}</Text>
+          )}
+        </View>
+      )}
+
+      {/* Draft Editor */}
+      <View style={styles.draftEditorContainer}>
+        <Text style={styles.draftLabel}>Response Content</Text>
+        <TextInput
+          style={styles.draftEditor}
+          placeholder="Draft your response to this notice..."
+          placeholderTextColor={COLORS.gray[400]}
+          value={draftContent}
+          onChangeText={setDraftContent}
+          multiline
+          textAlignVertical="top"
+          editable={!response || response.status === 'draft' || response.status === 'rejected'}
+        />
+      </View>
+
+      {/* Action Buttons */}
+      <View style={styles.responseActions}>
+        {(!response || response.status === 'draft' || response.status === 'rejected') && (
+          <>
+            <TouchableOpacity
+              style={[styles.responseActionButton, styles.saveDraftButton]}
+              onPress={handleSaveDraft}
+              disabled={isSaving || !draftContent.trim()}
+            >
+              <Text style={styles.saveDraftButtonText}>
+                {isSaving ? 'Saving...' : 'Save Draft'}
+              </Text>
+            </TouchableOpacity>
+
+            {response?.id && (
+              <TouchableOpacity
+                style={[styles.responseActionButton, styles.submitButton]}
+                onPress={() => setShowSubmitModal(true)}
+                disabled={!draftContent.trim()}
+              >
+                <Text style={styles.submitButtonText}>Submit for Review</Text>
+              </TouchableOpacity>
+            )}
+          </>
+        )}
+
+        {response?.status === 'pending_review' && (
+          <TouchableOpacity
+            style={[styles.responseActionButton, styles.approveButton]}
+            onPress={handleApprove}
+          >
+            <CheckCircle size={18} color={COLORS.white} />
+            <Text style={styles.approveButtonText}>Approve Response</Text>
+          </TouchableOpacity>
+        )}
+
+        {response?.status === 'approved' && (
+          <TouchableOpacity
+            style={[styles.responseActionButton, styles.markSubmittedButton]}
+            onPress={handleMarkSubmitted}
+          >
+            <Send size={18} color={COLORS.white} />
+            <Text style={styles.markSubmittedButtonText}>Mark as Submitted</Text>
+          </TouchableOpacity>
+        )}
+      </View>
+
+      {/* Review Notes */}
+      {response?.reviewNotes && (
+        <View style={styles.reviewNotesContainer}>
+          <Text style={styles.reviewNotesLabel}>Review Notes</Text>
+          <Text style={styles.reviewNotesText}>{response.reviewNotes}</Text>
+          {response.reviewedByName && (
+            <Text style={styles.reviewedBy}>— {response.reviewedByName}</Text>
+          )}
+        </View>
+      )}
+
+      {/* Submit Modal */}
+      <Modal
+        visible={showSubmitModal}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setShowSubmitModal(false)}
+      >
+        <KeyboardAvoidingView
+          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+          style={styles.modalOverlay}
+        >
+          <View style={styles.submitModalContent}>
+            <Text style={styles.modalTitle}>Submit for Review</Text>
+            <Text style={styles.modalSubtitle}>Add any notes for the reviewer</Text>
+
+            <TextInput
+              style={styles.submitNotesInput}
+              placeholder="Notes (optional)"
+              placeholderTextColor={COLORS.gray[400]}
+              value={submitNotes}
+              onChangeText={setSubmitNotes}
+              multiline
+              numberOfLines={3}
+            />
+
+            <View style={styles.submitModalActions}>
+              <TouchableOpacity
+                style={styles.submitModalCancel}
+                onPress={() => setShowSubmitModal(false)}
+              >
+                <Text style={styles.submitModalCancelText}>Cancel</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={styles.submitModalConfirm}
+                onPress={handleSubmitForReview}
+              >
+                <Text style={styles.submitModalConfirmText}>Submit</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </KeyboardAvoidingView>
+      </Modal>
     </View>
   );
 }
@@ -567,9 +902,12 @@ function TasksTab({ tasks, noticeId }: { tasks: TaskDto[]; noticeId: string }) {
     try {
       await createTask.mutateAsync({
         noticeId,
-        title: newTaskTitle.trim(),
-        description: newTaskDescription.trim() || undefined,
-        priority: newTaskPriority,
+        data: {
+          title: newTaskTitle.trim(),
+          description: newTaskDescription.trim() || undefined,
+          priority: newTaskPriority,
+          assignees: [], // No assignees on quick create
+        },
       });
       setNewTaskTitle('');
       setNewTaskDescription('');
@@ -743,6 +1081,7 @@ function TasksTab({ tasks, noticeId }: { tasks: TaskDto[]; noticeId: string }) {
 // Comments Tab
 function CommentsTab({ comments, noticeId }: { comments: CommentResponseDto[]; noticeId: string }) {
   const [newComment, setNewComment] = useState('');
+  const [visibility, setVisibility] = useState<CommentVisibility>('internal');
   const createComment = useCreateComment();
 
   const handleSubmitComment = useCallback(async () => {
@@ -751,13 +1090,50 @@ function CommentsTab({ comments, noticeId }: { comments: CommentResponseDto[]; n
     try {
       await createComment.mutateAsync({
         noticeId,
-        content: newComment.trim(),
+        data: {
+          content: newComment.trim(),
+          visibility,
+        },
       });
       setNewComment('');
     } catch (error) {
       Alert.alert('Error', 'Failed to post comment. Please try again.');
     }
-  }, [newComment, noticeId, createComment]);
+  }, [newComment, noticeId, createComment, visibility]);
+
+  const getVisibilityColor = (vis: string) => {
+    return vis === 'all' ? COLORS.warning : COLORS.info;
+  };
+
+  const renderCommentContent = (content: string, mentions?: { userId: string; name: string }[]) => {
+    if (!mentions || mentions.length === 0) {
+      return <Text style={styles.commentText}>{content}</Text>;
+    }
+
+    // Simple mention highlighting - replace @mentions with styled text
+    let parts: React.ReactNode[] = [];
+    let lastIndex = 0;
+    const mentionRegex = /@(\w+)/g;
+    let match;
+
+    while ((match = mentionRegex.exec(content)) !== null) {
+      if (match.index > lastIndex) {
+        parts.push(content.substring(lastIndex, match.index));
+      }
+      parts.push(
+        <Text key={match.index} style={styles.mentionText}>
+          {match[0]}
+        </Text>
+      );
+      lastIndex = match.index + match[0].length;
+    }
+
+    if (lastIndex < content.length) {
+      parts.push(content.substring(lastIndex));
+    }
+
+    return <Text style={styles.commentText}>{parts}</Text>;
+  };
 
   return (
     <View style={styles.commentsContainer}>
@@ -778,12 +1154,21 @@ function CommentsTab({ comments, noticeId }: { comments: CommentResponseDto[]; n
               </View>
               <View style={styles.commentContent}>
                 <View style={styles.commentHeader}>
-                  <Text style={styles.commentAuthor}>{comment.author.name}</Text>
+                  <View style={styles.commentAuthorRow}>
+                    <Text style={styles.commentAuthor}>{comment.author.name}</Text>
+                    {comment.visibility && (
+                      <View style={[styles.visibilityBadge, { backgroundColor: getVisibilityColor(comment.visibility) + '20' }]}>
+                        <Text style={[styles.visibilityBadgeText, { color: getVisibilityColor(comment.visibility) }]}>
+                          {comment.visibility === 'all' ? 'All' : 'Internal'}
+                        </Text>
+                      </View>
+                    )}
+                  </View>
                   <Text style={styles.commentTime}>
                     {new Date(comment.createdAt).toLocaleDateString()}
                   </Text>
                 </View>
-                <Text style={styles.commentText}>{comment.content}</Text>
+                {renderCommentContent(comment.content, comment.mentions)}
                 {comment.reactions.length > 0 && (
                   <View style={styles.reactions}>
                     {comment.reactions.map((reaction) => (
@@ -800,27 +1185,66 @@ function CommentsTab({ comments, noticeId }: { comments: CommentResponseDto[]; n
         </View>
       )}
 
-      {/* Comment Input */}
-      <View style={styles.commentInputContainer}>
-        <TextInput
-          style={styles.commentInput}
-          placeholder="Write a comment..."
-          placeholderTextColor={COLORS.gray[400]}
-          value={newComment}
-          onChangeText={setNewComment}
-          multiline
-          maxLength={2000}
-        />
-        <TouchableOpacity
-          style={[
-            styles.sendButton,
-            (!newComment.trim() || createComment.isPending) && styles.sendButtonDisabled,
-          ]}
-          onPress={handleSubmitComment}
-          disabled={!newComment.trim() || createComment.isPending}
-        >
-          <Send size={20} color={newComment.trim() ? COLORS.white : COLORS.gray[400]} />
-        </TouchableOpacity>
+      {/* Comment Input with Visibility Toggle */}
+      <View style={styles.commentComposeContainer}>
+        {/* Visibility Toggle */}
+        <View style={styles.visibilityToggle}>
+          <TouchableOpacity
+            style={[
+              styles.visibilityOption,
+              visibility === 'internal' && styles.visibilityOptionActive,
+            ]}
+            onPress={() => setVisibility('internal')}
+          >
+            <Text
+              style={[
+                styles.visibilityOptionText,
+                visibility === 'internal' && styles.visibilityOptionTextActive,
+              ]}
+            >
+              Internal
+            </Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={[
+              styles.visibilityOption,
+              visibility === 'all' && styles.visibilityOptionActivePublic,
+            ]}
+            onPress={() => setVisibility('all')}
+          >
+            <Text
+              style={[
+                styles.visibilityOptionText,
+                visibility === 'all' && styles.visibilityOptionTextActive,
+              ]}
+            >
+              All
+            </Text>
+          </TouchableOpacity>
+        </View>
+
+        {/* Input Row */}
+        <View style={styles.commentInputContainer}>
+          <TextInput
+            style={styles.commentInput}
+            placeholder="Write a comment... Use @ to mention"
+            placeholderTextColor={COLORS.gray[400]}
+            value={newComment}
+            onChangeText={setNewComment}
+            multiline
+            maxLength={2000}
+          />
+          <TouchableOpacity
+            style={[
+              styles.sendButton,
+              (!newComment.trim() || createComment.isPending) && styles.sendButtonDisabled,
+            ]}
+            onPress={handleSubmitComment}
+            disabled={!newComment.trim() || createComment.isPending}
+          >
+            <Send size={20} color={newComment.trim() ? COLORS.white : COLORS.gray[400]} />
+          </TouchableOpacity>
+        </View>
       </View>
     </View>
   );
@@ -1073,6 +1497,112 @@ function DocumentRequestsTab({
   );
 }
 
+// Activity Tab
+function ActivityTab({
+  activities,
+  hasMore,
+  onLoadMore,
+}: {
+  activities: ActivityDto[];
+  hasMore: boolean;
+  onLoadMore?: () => void;
+}) {
+  const getActivityIcon = (type: string) => {
+    switch (type) {
+      case 'notice_created':
+      case 'notice_uploaded':
+        return <FileText size={16} color={COLORS.primary} />;
+      case 'notice_updated':
+        return <FileText size={16} color={COLORS.info} />;
+      case 'status_changed':
+        return <AlertCircle size={16} color={COLORS.warning} />;
+      case 'comment_added':
+        return <MessageSquare size={16} color={COLORS.success} />;
+      case 'task_created':
+      case 'task_updated':
+        return <CheckCircle size={16} color={COLORS.primary} />;
+      case 'assigned':
+        return <User size={16} color={COLORS.info} />;
+      case 'response_submitted':
+      case 'response_approved':
+        return <Send size={16} color={COLORS.success} />;
+      default:
+        return <Clock size={16} color={COLORS.gray[400]} />;
+    }
+  };
+
+  const formatTimestamp = (timestamp: string) => {
+    const date = new Date(timestamp);
+    const now = new Date();
+    const diffMs = now.getTime() - date.getTime();
+    const diffMins = Math.floor(diffMs / 60000);
+    const diffHours = Math.floor(diffMs / 3600000);
+    const diffDays = Math.floor(diffMs / 86400000);
+
+    if (diffMins < 1) return 'Just now';
+    if (diffMins < 60) return `${diffMins}m ago`;
+    if (diffHours < 24) return `${diffHours}h ago`;
+    if (diffDays < 7) return `${diffDays}d ago`;
+    return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+  };
+
+  const groupActivitiesByDate = (items: ActivityDto[]) => {
+    const groups: { [key: string]: ActivityDto[] } = {};
+    items.forEach((item) => {
+      const date = new Date(item.timestamp).toLocaleDateString('en-US', {
+        month: 'long',
+        day: 'numeric',
+        year: 'numeric',
+      });
+      if (!groups[date]) groups[date] = [];
+      groups[date].push(item);
+    });
+    return groups;
+  };
+
+  if (activities.length === 0) {
+    return (
+      <EmptyState
+        title="No Activity Yet"
+        message="Activity history will appear here as actions are taken on this notice."
+        icon={<Clock size={48} color={COLORS.gray[400]} />}
+      />
+    );
+  }
+
+  const groupedActivities = groupActivitiesByDate(activities);
+
+  return (
+    <View style={styles.activityContainer}>
+      {Object.entries(groupedActivities).map(([date, items]) => (
+        <View key={date} style={styles.activityGroup}>
+          <Text style={styles.activityDate}>{date}</Text>
+          {items.map((activity) => (
+            <View key={activity.id} style={styles.activityItem}>
+              <View style={styles.activityIconContainer}>
+                {getActivityIcon(activity.type)}
+              </View>
+              <View style={styles.activityContent}>
+                <View style={styles.activityHeader}>
+                  <Text style={styles.activityActor}>{activity.actor?.name || 'System'}</Text>
+                  <Text style={styles.activityTime}>{formatTimestamp(activity.timestamp)}</Text>
+                </View>
+                <Text style={styles.activityMessage}>{activity.message}</Text>
+              </View>
+            </View>
+          ))}
+        </View>
+      ))}
+
+      {hasMore && onLoadMore && (
+        <TouchableOpacity style={styles.loadMoreButton} onPress={onLoadMore}>
+          <Text style={styles.loadMoreText}>Load More</Text>
+        </TouchableOpacity>
+      )}
+    </View>
+  );
+}
+
 // Info Row Component
 function InfoRow({ label, value }: { label: string; value?: string | null }) {
   return (
@@ -1122,6 +1652,22 @@ const styles = StyleSheet.create({
     fontSize: FONT_SIZES.xs,
     fontWeight: '600',
     color: COLORS.white,
+  },
+  viewPdfButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: SPACING.sm,
+    paddingVertical: SPACING.sm,
+    paddingHorizontal: SPACING.md,
+    backgroundColor: COLORS.primaryLight,
+    borderRadius: BORDER_RADIUS.md,
+    marginBottom: SPACING.md,
+  },
+  viewPdfButtonText: {
+    fontSize: FONT_SIZES.sm,
+    fontWeight: '500',
+    color: COLORS.primary,
   },
   headerStats: {
     flexDirection: 'row',
@@ -1918,5 +2464,281 @@ const styles = StyleSheet.create({
   uploadCancelText: {
     fontSize: FONT_SIZES.md,
     color: COLORS.gray[500],
+  },
+  // Response Tab styles
+  responseContainer: {
+    flex: 1,
+  },
+  responseHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: SPACING.md,
+    marginBottom: SPACING.md,
+  },
+  responseStatusBadge: {
+    paddingHorizontal: SPACING.sm,
+    paddingVertical: 4,
+    borderRadius: BORDER_RADIUS.sm,
+  },
+  responseStatusText: {
+    fontSize: FONT_SIZES.xs,
+    fontWeight: '600',
+    color: COLORS.white,
+    textTransform: 'uppercase',
+  },
+  responseVersion: {
+    fontSize: FONT_SIZES.sm,
+    color: COLORS.gray[500],
+  },
+  draftEditorContainer: {
+    marginBottom: SPACING.md,
+  },
+  draftLabel: {
+    fontSize: FONT_SIZES.sm,
+    fontWeight: '500',
+    color: COLORS.gray[700],
+    marginBottom: SPACING.xs,
+  },
+  draftEditor: {
+    backgroundColor: COLORS.gray[50],
+    borderWidth: 1,
+    borderColor: COLORS.gray[200],
+    borderRadius: BORDER_RADIUS.md,
+    padding: SPACING.md,
+    fontSize: FONT_SIZES.md,
+    color: COLORS.gray[900],
+    minHeight: 200,
+    maxHeight: 400,
+  },
+  responseActions: {
+    gap: SPACING.sm,
+    marginBottom: SPACING.md,
+  },
+  responseActionButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: SPACING.sm,
+    paddingVertical: SPACING.md,
+    borderRadius: BORDER_RADIUS.md,
+  },
+  saveDraftButton: {
+    backgroundColor: COLORS.gray[100],
+  },
+  saveDraftButtonText: {
+    fontSize: FONT_SIZES.md,
+    fontWeight: '500',
+    color: COLORS.gray[700],
+  },
+  submitButton: {
+    backgroundColor: COLORS.warning,
+  },
+  submitButtonText: {
+    fontSize: FONT_SIZES.md,
+    fontWeight: '500',
+    color: COLORS.white,
+  },
+  approveButton: {
+    backgroundColor: COLORS.success,
+  },
+  approveButtonText: {
+    fontSize: FONT_SIZES.md,
+    fontWeight: '500',
+    color: COLORS.white,
+  },
+  markSubmittedButton: {
+    backgroundColor: COLORS.primary,
+  },
+  markSubmittedButtonText: {
+    fontSize: FONT_SIZES.md,
+    fontWeight: '500',
+    color: COLORS.white,
+  },
+  reviewNotesContainer: {
+    backgroundColor: COLORS.gray[50],
+    borderRadius: BORDER_RADIUS.md,
+    padding: SPACING.md,
+    borderLeftWidth: 3,
+    borderLeftColor: COLORS.warning,
+  },
+  reviewNotesLabel: {
+    fontSize: FONT_SIZES.sm,
+    fontWeight: '600',
+    color: COLORS.gray[700],
+    marginBottom: SPACING.xs,
+  },
+  reviewNotesText: {
+    fontSize: FONT_SIZES.md,
+    color: COLORS.gray[600],
+    lineHeight: 22,
+  },
+  reviewedBy: {
+    fontSize: FONT_SIZES.sm,
+    color: COLORS.gray[500],
+    marginTop: SPACING.sm,
+    fontStyle: 'italic',
+  },
+  submitModalContent: {
+    backgroundColor: COLORS.white,
+    borderTopLeftRadius: BORDER_RADIUS.xl,
+    borderTopRightRadius: BORDER_RADIUS.xl,
+    padding: SPACING.lg,
+    paddingBottom: SPACING.xxl,
+  },
+  submitNotesInput: {
+    backgroundColor: COLORS.gray[50],
+    borderWidth: 1,
+    borderColor: COLORS.gray[200],
+    borderRadius: BORDER_RADIUS.md,
+    padding: SPACING.md,
+    fontSize: FONT_SIZES.md,
+    color: COLORS.gray[900],
+    minHeight: 100,
+    textAlignVertical: 'top',
+    marginBottom: SPACING.lg,
+  },
+  submitModalActions: {
+    flexDirection: 'row',
+    gap: SPACING.md,
+  },
+  submitModalCancel: {
+    flex: 1,
+    paddingVertical: SPACING.md,
+    borderRadius: BORDER_RADIUS.md,
+    backgroundColor: COLORS.gray[100],
+    alignItems: 'center',
+  },
+  submitModalCancelText: {
+    fontSize: FONT_SIZES.md,
+    fontWeight: '500',
+    color: COLORS.gray[600],
+  },
+  submitModalConfirm: {
+    flex: 1,
+    paddingVertical: SPACING.md,
+    borderRadius: BORDER_RADIUS.md,
+    backgroundColor: COLORS.primary,
+    alignItems: 'center',
+  },
+  submitModalConfirmText: {
+    fontSize: FONT_SIZES.md,
+    fontWeight: '500',
+    color: COLORS.white,
+  },
+  // Activity Tab styles
+  activityContainer: {
+    flex: 1,
+  },
+  activityGroup: {
+    marginBottom: SPACING.lg,
+  },
+  activityDate: {
+    fontSize: FONT_SIZES.sm,
+    fontWeight: '600',
+    color: COLORS.gray[500],
+    marginBottom: SPACING.sm,
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+  },
+  activityItem: {
+    flexDirection: 'row',
+    paddingVertical: SPACING.sm,
+    borderLeftWidth: 2,
+    borderLeftColor: COLORS.gray[200],
+    marginLeft: SPACING.sm,
+    paddingLeft: SPACING.md,
+  },
+  activityIconContainer: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: COLORS.gray[100],
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: SPACING.md,
+  },
+  activityContent: {
+    flex: 1,
+  },
+  activityHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 2,
+  },
+  activityActor: {
+    fontSize: FONT_SIZES.sm,
+    fontWeight: '600',
+    color: COLORS.gray[900],
+  },
+  activityTime: {
+    fontSize: FONT_SIZES.xs,
+    color: COLORS.gray[400],
+  },
+  activityMessage: {
+    fontSize: FONT_SIZES.sm,
+    color: COLORS.gray[600],
+    lineHeight: 18,
+  },
+  loadMoreButton: {
+    paddingVertical: SPACING.md,
+    alignItems: 'center',
+    borderTopWidth: 1,
+    borderTopColor: COLORS.gray[100],
+    marginTop: SPACING.sm,
+  },
+  loadMoreText: {
+    fontSize: FONT_SIZES.sm,
+    fontWeight: '500',
+    color: COLORS.primary,
+  },
+  // Enhanced Comment styles
+  commentAuthorRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: SPACING.sm,
+  },
+  visibilityBadge: {
+    paddingHorizontal: SPACING.xs,
+    paddingVertical: 2,
+    borderRadius: BORDER_RADIUS.sm,
+  },
+  visibilityBadgeText: {
+    fontSize: FONT_SIZES.xs,
+    fontWeight: '500',
+  },
+  mentionText: {
+    color: COLORS.primary,
+    fontWeight: '500',
+  },
+  commentComposeContainer: {
+    marginTop: SPACING.md,
+    gap: SPACING.sm,
+  },
+  visibilityToggle: {
+    flexDirection: 'row',
+    backgroundColor: COLORS.gray[100],
+    borderRadius: BORDER_RADIUS.md,
+    padding: 4,
+  },
+  visibilityOption: {
+    flex: 1,
+    paddingVertical: SPACING.sm,
+    alignItems: 'center',
+    borderRadius: BORDER_RADIUS.md - 2,
+  },
+  visibilityOptionActive: {
+    backgroundColor: COLORS.info,
+  },
+  visibilityOptionActivePublic: {
+    backgroundColor: COLORS.warning,
+  },
+  visibilityOptionText: {
+    fontSize: FONT_SIZES.sm,
+    fontWeight: '500',
+    color: COLORS.gray[600],
+  },
+  visibilityOptionTextActive: {
+    color: COLORS.white,
   },
 });

@@ -4,9 +4,12 @@
  */
 
 import { create } from 'zustand';
+import { Platform } from 'react-native';
 import * as LocalAuthentication from 'expo-local-authentication';
-import { UserDto, LoginResponse, TwoFactorRequiredResponse } from '../types';
-import { authApi } from '../services/api';
+import { UserDto, LoginResponse, TwoFactorRequiredResponse, CreateOrganizationRequest } from '../types';
+
+const isWeb = Platform.OS === 'web';
+import { authApi, organizationsApi } from '../services/api';
 import {
   setTokens,
   clearTokens,
@@ -17,6 +20,7 @@ import {
   getBiometricEnabled,
   setBiometricEnabled,
   getAccessToken,
+  getRefreshToken,
 } from '../services/storage/secure';
 
 interface AuthState {
@@ -32,6 +36,9 @@ interface AuthState {
   requires2fa: boolean;
   partialToken: string | null;
 
+  // Onboarding state
+  needsOnboarding: boolean;
+
   // Actions
   initialize: () => Promise<void>;
   login: (email: string, password: string, rememberMe?: boolean) => Promise<void>;
@@ -42,6 +49,7 @@ interface AuthState {
   enableBiometric: () => Promise<boolean>;
   disableBiometric: () => Promise<void>;
   authenticateWithBiometric: () => Promise<boolean>;
+  completeOnboarding: (data: CreateOrganizationRequest) => Promise<void>;
 }
 
 export const useAuthStore = create<AuthState>((set, get) => ({
@@ -54,6 +62,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   biometricAvailable: false,
   requires2fa: false,
   partialToken: null,
+  needsOnboarding: false,
 
   /**
    * Initialize auth state from storage
@@ -73,6 +82,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
           set({
             isAuthenticated: true,
             user: cachedUser,
+            needsOnboarding: !cachedUser.organization?.id,
           });
 
           // Refresh profile in background
@@ -85,16 +95,27 @@ export const useAuthStore = create<AuthState>((set, get) => ({
               mobile: profile.mobile,
               avatarUrl: profile.avatarUrl,
               role: profile.role,
-              organizationId: profile.organization?.id,
-              organizationName: profile.organization?.name,
+              organization: profile.organization ? {
+                id: profile.organization.id,
+                name: profile.organization.name,
+                role: profile.role,
+              } : undefined,
+              organizations: profile.organizations.map(org => ({
+                id: org.organizationId,
+                name: org.organizationName,
+                role: org.role,
+              })),
             };
             await setUser(user);
-            set({ user });
+            set({
+              user,
+              needsOnboarding: !user.organization?.id,
+            });
           } catch {
             // If profile fetch fails, tokens may be invalid
             await clearTokens();
             await clearUser();
-            set({ isAuthenticated: false, user: null });
+            set({ isAuthenticated: false, user: null, needsOnboarding: false });
           }
         }
       }
@@ -142,14 +163,19 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       // Normal login success
       const loginResponse = response as LoginResponse;
       await setTokens(loginResponse.accessToken, loginResponse.refreshToken);
-      await setUser(loginResponse.user);
+
+      const user = loginResponse.user;
+      if (user) {
+        await setUser(user);
+      }
 
       set({
         isLoading: false,
         isAuthenticated: true,
-        user: loginResponse.user,
+        user: user || null,
         requires2fa: false,
         partialToken: null,
+        needsOnboarding: !user?.organization?.id,
       });
     } catch (error) {
       set({ isLoading: false });
@@ -186,8 +212,16 @@ export const useAuthStore = create<AuthState>((set, get) => ({
         mobile: profile.mobile,
         avatarUrl: profile.avatarUrl,
         role: profile.role,
-        organizationId: profile.organization?.id,
-        organizationName: profile.organization?.name,
+        organization: profile.organization ? {
+          id: profile.organization.id,
+          name: profile.organization.name,
+          role: profile.role,
+        } : undefined,
+        organizations: profile.organizations.map(org => ({
+          id: org.organizationId,
+          name: org.organizationName,
+          role: org.role,
+        })),
       };
       await setUser(user);
 
@@ -197,6 +231,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
         user,
         requires2fa: false,
         partialToken: null,
+        needsOnboarding: !user.organization?.id,
       });
     } catch (error) {
       set({ isLoading: false });
@@ -229,6 +264,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
         user: null,
         requires2fa: false,
         partialToken: null,
+        needsOnboarding: false,
       });
     }
   },
@@ -246,11 +282,19 @@ export const useAuthStore = create<AuthState>((set, get) => ({
         mobile: profile.mobile,
         avatarUrl: profile.avatarUrl,
         role: profile.role,
-        organizationId: profile.organization?.id,
-        organizationName: profile.organization?.name,
+        organization: profile.organization ? {
+          id: profile.organization.id,
+          name: profile.organization.name,
+          role: profile.role,
+        } : undefined,
+        organizations: profile.organizations.map(org => ({
+          id: org.organizationId,
+          name: org.organizationName,
+          role: org.role,
+        })),
       };
       await setUser(user);
-      set({ user });
+      set({ user, needsOnboarding: !user.organization?.id });
     } catch (error) {
       console.error('Failed to refresh profile:', error);
       throw error;
@@ -261,6 +305,10 @@ export const useAuthStore = create<AuthState>((set, get) => ({
    * Check if biometric auth is available on device
    */
   checkBiometricAvailability: async () => {
+    if (isWeb) {
+      set({ biometricAvailable: false });
+      return;
+    }
     try {
       const hasHardware = await LocalAuthentication.hasHardwareAsync();
       const isEnrolled = await LocalAuthentication.isEnrolledAsync();
@@ -274,6 +322,8 @@ export const useAuthStore = create<AuthState>((set, get) => ({
    * Enable biometric authentication
    */
   enableBiometric: async () => {
+    if (isWeb) return false;
+
     const { biometricAvailable } = get();
 
     if (!biometricAvailable) {
@@ -311,6 +361,8 @@ export const useAuthStore = create<AuthState>((set, get) => ({
    * Authenticate using biometric
    */
   authenticateWithBiometric: async () => {
+    if (isWeb) return false;
+
     const { biometricEnabled, biometricAvailable } = get();
 
     if (!biometricEnabled || !biometricAvailable) {
@@ -326,6 +378,60 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       return result.success;
     } catch {
       return false;
+    }
+  },
+
+  /**
+   * Complete onboarding by creating an organization
+   */
+  completeOnboarding: async (data: CreateOrganizationRequest) => {
+    set({ isLoading: true });
+
+    try {
+      const response = await organizationsApi.createOrganization(data);
+
+      // If response includes new tokens, update them
+      if (response.accessToken) {
+        const refreshToken = await getRefreshToken();
+        await setTokens(response.accessToken, refreshToken || '');
+      }
+
+      // Update user with organization info
+      const { user } = get();
+      if (user) {
+        const updatedUser: UserDto = {
+          ...user,
+          organization: {
+            id: response.id,
+            name: response.name,
+            role: response.currentUserRole,
+          },
+          organizations: [
+            ...user.organizations,
+            {
+              id: response.id,
+              name: response.name,
+              role: response.currentUserRole,
+            },
+          ],
+        };
+        await setUser(updatedUser);
+        set({
+          user: updatedUser,
+          needsOnboarding: false,
+          isLoading: false,
+        });
+      } else {
+        // Fetch profile to get updated user data
+        await get().refreshProfile();
+        set({
+          needsOnboarding: false,
+          isLoading: false,
+        });
+      }
+    } catch (error) {
+      set({ isLoading: false });
+      throw error;
     }
   },
 }));

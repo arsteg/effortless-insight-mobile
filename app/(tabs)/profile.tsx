@@ -27,12 +27,15 @@ import {
   Info,
   Trash2,
   ExternalLink,
+  CreditCard,
 } from 'lucide-react-native';
 import * as WebBrowser from 'expo-web-browser';
 import * as Linking from 'expo-linking';
 import { useAuthStore, useOfflineStore } from '../../src/stores';
+import { useTranslation } from '../../src/hooks';
 import { Button, LoadingSpinner } from '../../src/components/common';
 import { COLORS, SPACING, FONT_SIZES, BORDER_RADIUS } from '../../src/utils/constants';
+import { Languages } from 'lucide-react-native';
 
 export default function ProfileScreen() {
   const router = useRouter();
@@ -48,9 +51,14 @@ export default function ProfileScreen() {
 
   const { queueTotal, clearAllCache, clearAllQueue, loadCacheStatus, loadQueueStatus } =
     useOfflineStore();
+  const { t, locale, isHindi } = useTranslation();
 
   const [notificationsEnabled, setNotificationsEnabled] = useState(true);
   const [darkModeEnabled, setDarkModeEnabled] = useState(false);
+
+  const handleLanguage = () => {
+    router.push('/settings/language');
+  };
 
   React.useEffect(() => {
     loadCacheStatus();
@@ -106,33 +114,17 @@ export default function ProfileScreen() {
   };
 
   const handleEditProfile = () => {
-    Alert.alert(
-      'Edit Profile',
-      'Profile editing is currently only available on the web app. Would you like to open it?',
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Open Web App',
-          onPress: () => {
-            Linking.openURL('https://app.effortlessinsight.com/settings/profile');
-          },
-        },
-      ]
-    );
+    router.push('/settings/edit-profile');
   };
 
   const handleSecurity = () => {
-    Alert.alert(
-      'Security Settings',
-      'Advanced security settings are available on the web app. Biometric login can be configured below.',
-      [{ text: 'OK' }]
-    );
+    router.push('/settings/change-password');
   };
 
   const handleOrganization = () => {
     Alert.alert(
       'Organization',
-      `You are currently logged in to: ${user?.organizationName || 'Unknown Organization'}\n\nOrganization settings are available on the web app.`,
+      `You are currently logged in to: ${user?.organization?.name || 'Unknown Organization'}\n\nOrganization settings are available on the web app.`,
       [
         { text: 'OK' },
         {
@@ -216,6 +208,11 @@ export default function ProfileScreen() {
           onPress={handleEditProfile}
         />
         <SettingItem
+          icon={<CreditCard size={20} color={COLORS.gray[500]} />}
+          label="Subscription"
+          onPress={() => router.push('/billing')}
+        />
+        <SettingItem
           icon={<Shield size={20} color={COLORS.gray[500]} />}
           label="Security"
           onPress={handleSecurity}
@@ -223,18 +220,25 @@ export default function ProfileScreen() {
         <SettingItem
           icon={<Globe size={20} color={COLORS.gray[500]} />}
           label="Organization"
-          value={user?.organizationName}
+          value={user?.organization?.name}
           onPress={handleOrganization}
         />
       </View>
 
       {/* Preferences Section */}
       <View style={styles.section}>
-        <Text style={styles.sectionTitle}>Preferences</Text>
+        <Text style={styles.sectionTitle}>{t('profile.title') === 'Profile' ? 'Preferences' : 'प्राथमिकताएं'}</Text>
+
+        <SettingItem
+          icon={<Languages size={20} color={COLORS.gray[500]} />}
+          label={t('profile.language')}
+          value={isHindi ? 'हिन्दी' : 'English'}
+          onPress={handleLanguage}
+        />
 
         <SettingToggle
           icon={<Bell size={20} color={COLORS.gray[500]} />}
-          label="Push Notifications"
+          label={isHindi ? 'पुश सूचनाएं' : 'Push Notifications'}
           value={notificationsEnabled}
           onToggle={setNotificationsEnabled}
         />

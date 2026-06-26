@@ -161,7 +161,7 @@ export function useMarkAsRead() {
       // Optimistically update count
       queryClient.setQueryData(notificationKeys.unreadCount(), (old: any) => {
         if (!old) return old;
-        return { ...old, count: Math.max(0, old.count - 1) };
+        return { ...old, unreadCount: Math.max(0, old.unreadCount - 1) };
       });
 
       return { previousLists, previousCount };
@@ -218,7 +218,7 @@ export function useMarkAllAsRead() {
 
       queryClient.setQueryData(notificationKeys.unreadCount(), (old: any) => {
         if (!old) return old;
-        return { ...old, count: 0, byPriority: { critical: 0, high: 0, medium: 0, low: 0 } };
+        return { ...old, unreadCount: 0 };
       });
 
       return { previousLists, previousCount };

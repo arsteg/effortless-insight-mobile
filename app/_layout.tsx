@@ -10,6 +10,7 @@ import { View, Platform } from 'react-native';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import * as SplashScreen from 'expo-splash-screen';
 import * as Notifications from 'expo-notifications';
+import * as Linking from 'expo-linking';
 import { useAuthStore, useUIStore } from '../src/stores';
 import { ErrorBoundary, LoadingSpinner, OfflineBanner } from '../src/components/common';
 import { COLORS } from '../src/utils/constants';
@@ -43,7 +44,7 @@ function RootLayoutNav() {
   const segments = useSegments();
   const responseListenerRef = useRef<Notifications.EventSubscription | null>(null);
 
-  const { isAuthenticated, isInitialized, initialize } = useAuthStore();
+  const { isAuthenticated, isInitialized, needsOnboarding, initialize } = useAuthStore();
   const { initializeNetInfo } = useUIStore();
 
   // Initialize auth and network state
@@ -83,20 +84,73 @@ function RootLayoutNav() {
     }
   }, [isInitialized]);
 
+  // Handle deep links for password reset and email verification
+  useEffect(() => {
+    const handleDeepLink = (event: { url: string }) => {
+      const url = event.url;
+      if (!url) return;
+
+      try {
+        const parsed = Linking.parse(url);
+        const path = parsed.path;
+
+        if (path?.includes('reset-password')) {
+          const token = parsed.queryParams?.token as string;
+          if (token) {
+            router.push({ pathname: '/(auth)/reset-password', params: { token } });
+          }
+        } else if (path?.includes('verify-email')) {
+          const token = parsed.queryParams?.token as string;
+          if (token) {
+            router.push({ pathname: '/(auth)/verify-email', params: { token } });
+          }
+        }
+      } catch (error) {
+        console.error('Failed to parse deep link:', error);
+      }
+    };
+
+    // Handle initial URL (app opened via deep link)
+    Linking.getInitialURL().then((url) => {
+      if (url) {
+        handleDeepLink({ url });
+      }
+    });
+
+    // Listen for incoming deep links while app is open
+    const subscription = Linking.addEventListener('url', handleDeepLink);
+
+    return () => {
+      subscription.remove();
+    };
+  }, [router]);
+
   // Handle auth-based navigation
   useEffect(() => {
     if (!isInitialized) return;
 
     const inAuthGroup = segments[0] === '(auth)';
+    const inOnboardingGroup = segments[0] === '(onboarding)';
 
     if (!isAuthenticated && !inAuthGroup) {
       // Redirect to login if not authenticated
       router.replace('/(auth)/login');
     } else if (isAuthenticated && inAuthGroup) {
-      // Redirect to main app if authenticated
+      // Check if user needs onboarding (no organization)
+      if (needsOnboarding) {
+        router.replace('/(onboarding)/welcome');
+      } else {
+        // Redirect to main app if authenticated and has organization
+        router.replace('/(tabs)');
+      }
+    } else if (isAuthenticated && needsOnboarding && !inOnboardingGroup) {
+      // If authenticated but needs onboarding, redirect to onboarding
+      router.replace('/(onboarding)/welcome');
+    } else if (isAuthenticated && !needsOnboarding && inOnboardingGroup) {
+      // If onboarding complete, redirect to main app
       router.replace('/(tabs)');
     }
-  }, [isAuthenticated, isInitialized, segments]);
+  }, [isAuthenticated, isInitialized, needsOnboarding, segments]);
 
   // Show loading while initializing
   if (!isInitialized) {
@@ -123,6 +177,7 @@ function RootLayoutNav() {
         }}
       >
         <Stack.Screen name="(auth)" options={{ headerShown: false }} />
+        <Stack.Screen name="(onboarding)" options={{ headerShown: false }} />
         <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
         <Stack.Screen
           name="notices/[id]"
@@ -133,6 +188,13 @@ function RootLayoutNav() {
         />
         <Stack.Screen
           name="settings"
+          options={{
+            headerShown: false,
+            presentation: 'card',
+          }}
+        />
+        <Stack.Screen
+          name="billing"
           options={{
             headerShown: false,
             presentation: 'card',

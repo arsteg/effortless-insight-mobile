@@ -63,6 +63,13 @@ export interface RefreshTokenRequest {
   refreshToken: string;
 }
 
+// User Organization (nested in UserDto)
+export interface UserOrganizationDto {
+  id: string;
+  name: string;
+  role: string;
+}
+
 // User Profile
 export interface UserDto {
   id: string;
@@ -71,8 +78,8 @@ export interface UserDto {
   mobile?: string;
   avatarUrl?: string;
   role: UserRole;
-  organizationId?: string;
-  organizationName?: string;
+  organization?: UserOrganizationDto;
+  organizations: UserOrganizationDto[];
 }
 
 export interface UserProfileDto {
@@ -173,6 +180,20 @@ export interface ResetPasswordRequest {
   token: string;
   password: string;
   confirmPassword: string;
+}
+
+// Change Password (authenticated)
+export interface ChangePasswordRequest {
+  currentPassword: string;
+  newPassword: string;
+  confirmPassword: string;
+}
+
+// Update Profile
+export interface UpdateProfileRequest {
+  name?: string;
+  mobile?: string;
+  avatarUrl?: string;
 }
 
 // Auth State

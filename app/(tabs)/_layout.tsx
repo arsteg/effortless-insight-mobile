@@ -10,7 +10,7 @@ import { useUnreadCount } from '../../src/hooks/useNotifications';
 
 function NotificationTabIcon({ color, size }: { color: string; size: number }) {
   const { data } = useUnreadCount();
-  const count = data?.count ?? 0;
+  const count = data?.unreadCount ?? 0;
 
   return (
     <View style={styles.notificationIconContainer}>

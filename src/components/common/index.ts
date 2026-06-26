@@ -8,3 +8,4 @@ export { ErrorBoundary } from './ErrorBoundary';
 export { OfflineBanner } from './OfflineBanner';
 export { Button } from './Button';
 export { Input } from './Input';
+export { PasswordInput } from './PasswordInput';

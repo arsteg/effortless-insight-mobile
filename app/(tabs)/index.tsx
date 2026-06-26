@@ -13,9 +13,10 @@ import {
   RefreshControl,
 } from 'react-native';
 import { useRouter } from 'expo-router';
-import { AlertCircle, Clock, FileText, ChevronRight, TrendingUp, CheckSquare } from 'lucide-react-native';
+import { AlertCircle, Clock, FileText, ChevronRight, TrendingUp, CheckSquare, CreditCard } from 'lucide-react-native';
 import { useNoticeStatistics, useNoticesInfinite } from '../../src/hooks/useNotices';
 import { useMyTasks } from '../../src/hooks/useTasks';
+import { useCurrentSubscription } from '../../src/hooks/useBilling';
 import { useAuthStore } from '../../src/stores';
 import { LoadingSpinner, EmptyState } from '../../src/components/common';
 import { COLORS, SPACING, FONT_SIZES, BORDER_RADIUS, RISK_COLORS } from '../../src/utils/constants';
@@ -47,18 +48,23 @@ export default function DashboardScreen() {
     refetch: refetchTasks,
   } = useMyTasks({ dueWithin: 'week' });
 
+  const {
+    data: subscriptionData,
+    refetch: refetchSubscription,
+  } = useCurrentSubscription();
+
   const [refreshing, setRefreshing] = React.useState(false);
 
   const onRefresh = async () => {
     setRefreshing(true);
-    await Promise.all([refetchStats(), refetchNotices(), refetchTasks()]);
+    await Promise.all([refetchStats(), refetchNotices(), refetchTasks(), refetchSubscription()]);
     setRefreshing(false);
   };
 
   // Get urgent notices (due within 7 days)
-  const urgentNotices = noticesData?.pages[0]?.notices
+  const urgentNotices = (noticesData?.pages[0]?.notices || [])
     .filter((n) => n.daysRemaining !== undefined && n.daysRemaining <= 7)
-    .slice(0, 3) || [];
+    .slice(0, 3);
 
   // Get greeting based on time
   const getGreeting = () => {
@@ -81,7 +87,7 @@ export default function DashboardScreen() {
     totalCount: 0,
   };
 
-  const byStatus = stats.byStatus as Record<string, number>;
+  const byStatus = (stats.byStatus || {}) as Record<string, number>;
   const activeCount =
     (byStatus['uploaded'] || 0) +
     (byStatus['processing'] || 0) +
@@ -180,7 +186,7 @@ export default function DashboardScreen() {
 
         {tasksData?.tasks && tasksData.tasks.length > 0 ? (
           tasksData.tasks.slice(0, 3).map((task) => (
-            <TaskCard key={task.id} task={task} onPress={() => router.push(`/notices/${task.notice.id}`)} />
+            <TaskCard key={task.id} task={task} onPress={() => task.notice?.id && router.push(`/notices/${task.notice.id}`)} />
           ))
         ) : (
           <View style={styles.emptySection}>
@@ -189,6 +195,37 @@ export default function DashboardScreen() {
           </View>
         )}
       </View>
+
+      {/* Usage Summary */}
+      {subscriptionData?.usage && (
+        <View style={styles.section}>
+          <View style={styles.sectionHeader}>
+            <Text style={styles.sectionTitle}>Usage</Text>
+            <TouchableOpacity onPress={() => router.push('/billing')}>
+              <Text style={styles.sectionLink}>View Plan</Text>
+            </TouchableOpacity>
+          </View>
+          <View style={styles.usageCard}>
+            <UsageItem
+              label="Notices"
+              used={subscriptionData.usage.notices.used}
+              limit={subscriptionData.usage.notices.limit}
+            />
+            <UsageItem
+              label="Users"
+              used={subscriptionData.usage.users.used}
+              limit={subscriptionData.usage.users.limit}
+            />
+            {subscriptionData.usage.apiCalls && (
+              <UsageItem
+                label="API Calls"
+                used={subscriptionData.usage.apiCalls.used}
+                limit={subscriptionData.usage.apiCalls.limit}
+              />
+            )}
+          </View>
+        </View>
+      )}
 
       {/* Quick Actions */}
       <View style={styles.section}>
@@ -205,9 +242,9 @@ export default function DashboardScreen() {
             onPress={() => router.push('/tasks')}
           />
           <QuickActionButton
-            label="Analytics"
-            icon={<TrendingUp size={24} color={COLORS.primary} />}
-            onPress={() => {}}
+            label="Subscription"
+            icon={<CreditCard size={24} color={COLORS.primary} />}
+            onPress={() => router.push('/billing')}
           />
         </View>
       </View>
@@ -282,7 +319,7 @@ function TaskCard({
   task,
   onPress,
 }: {
-  task: { id: string; title: string; notice: { noticeType?: string }; priority: string; isOverdue: boolean };
+  task: { id: string; title: string; notice?: { id?: string; noticeType?: string }; priority: string; isOverdue: boolean };
   onPress: () => void;
 }) {
   return (
@@ -290,7 +327,7 @@ function TaskCard({
       <View style={[styles.taskPriority, { backgroundColor: RISK_COLORS[task.priority as keyof typeof RISK_COLORS] || COLORS.gray[400] }]} />
       <View style={styles.taskInfo}>
         <Text style={styles.taskTitle} numberOfLines={1}>{task.title}</Text>
-        <Text style={styles.taskNotice}>{task.notice.noticeType || 'Notice'}</Text>
+        <Text style={styles.taskNotice}>{task.notice?.noticeType || 'Notice'}</Text>
       </View>
       {task.isOverdue && (
         <View style={styles.overdueTag}>
@@ -316,6 +353,49 @@ function QuickActionButton({
       {icon}
       <Text style={styles.quickActionLabel}>{label}</Text>
     </TouchableOpacity>
+  );
+}
+
+// Usage Item Component
+function UsageItem({
+  label,
+  used,
+  limit,
+}: {
+  label: string;
+  used: number;
+  limit: number;
+}) {
+  // Consider unlimited if limit is 0 or very high (>= 10000)
+  const isUnlimited = limit === 0 || limit >= 10000;
+  const percentage = isUnlimited ? 0 : Math.min((used / limit) * 100, 100);
+  const getColor = () => {
+    if (isUnlimited) return COLORS.primary;
+    if (percentage >= 90) return COLORS.error;
+    if (percentage >= 75) return COLORS.warning;
+    return COLORS.primary;
+  };
+
+  return (
+    <View style={styles.usageItem}>
+      <View style={styles.usageItemHeader}>
+        <Text style={styles.usageItemLabel}>{label}</Text>
+        <Text style={styles.usageItemValue}>
+          {used} / {isUnlimited ? '∞' : limit}
+        </Text>
+      </View>
+      <View style={styles.usageItemBar}>
+        <View
+          style={[
+            styles.usageItemProgress,
+            {
+              width: isUnlimited ? '10%' : `${percentage}%`,
+              backgroundColor: getColor(),
+            },
+          ]}
+        />
+      </View>
+    </View>
   );
 }
 
@@ -530,5 +610,43 @@ const styles = StyleSheet.create({
     fontSize: FONT_SIZES.sm,
     color: COLORS.gray[700],
     fontWeight: '500',
+  },
+  usageCard: {
+    backgroundColor: COLORS.white,
+    borderRadius: BORDER_RADIUS.lg,
+    padding: SPACING.md,
+    gap: SPACING.md,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.05,
+    shadowRadius: 2,
+    elevation: 2,
+  },
+  usageItem: {
+    gap: SPACING.xs,
+  },
+  usageItemHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  usageItemLabel: {
+    fontSize: FONT_SIZES.sm,
+    color: COLORS.gray[600],
+  },
+  usageItemValue: {
+    fontSize: FONT_SIZES.sm,
+    fontWeight: '500',
+    color: COLORS.gray[900],
+  },
+  usageItemBar: {
+    height: 6,
+    backgroundColor: COLORS.gray[100],
+    borderRadius: BORDER_RADIUS.full,
+    overflow: 'hidden',
+  },
+  usageItemProgress: {
+    height: '100%',
+    borderRadius: BORDER_RADIUS.full,
   },
 });

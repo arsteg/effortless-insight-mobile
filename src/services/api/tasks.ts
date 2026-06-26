@@ -20,6 +20,7 @@ import {
   DocumentRequestListResponseDto,
   CreateDocumentRequestDto,
   UpdateDocumentRequestDto,
+  ApiResponse,
 } from '../../types';
 import { PAGINATION } from '../../utils/constants';
 
@@ -50,10 +51,10 @@ export const tasksApi = {
       queryParams.append('includeSubtasks', String(params.includeSubtasks));
     }
 
-    const response = await apiClient.get<TaskListResponseDto>(
+    const response = await apiClient.get<ApiResponse<TaskListResponseDto>>(
       `/notices/${noticeId}/tasks?${queryParams.toString()}`
     );
-    return response.data;
+    return response.data.data;
   },
 
   /**
@@ -76,32 +77,32 @@ export const tasksApi = {
     queryParams.append('page', String(params.page || 1));
     queryParams.append('pageSize', String(params.pageSize || PAGINATION.DEFAULT_PAGE_SIZE));
 
-    const response = await apiClient.get<MyTasksResponseDto>(`/tasks/my?${queryParams.toString()}`);
-    return response.data;
+    const response = await apiClient.get<ApiResponse<MyTasksResponseDto>>(`/tasks/my?${queryParams.toString()}`);
+    return response.data.data;
   },
 
   /**
    * Get task by ID
    */
   getTask: async (taskId: string): Promise<TaskDetailDto> => {
-    const response = await apiClient.get<TaskDetailDto>(`/tasks/${taskId}`);
-    return response.data;
+    const response = await apiClient.get<ApiResponse<TaskDetailDto>>(`/tasks/${taskId}`);
+    return response.data.data;
   },
 
   /**
    * Create task for a notice
    */
   createTask: async (noticeId: string, data: CreateTaskDto): Promise<TaskDetailDto> => {
-    const response = await apiClient.post<TaskDetailDto>(`/notices/${noticeId}/tasks`, data);
-    return response.data;
+    const response = await apiClient.post<ApiResponse<TaskDetailDto>>(`/notices/${noticeId}/tasks`, data);
+    return response.data.data;
   },
 
   /**
    * Update task
    */
   updateTask: async (taskId: string, data: UpdateTaskDto): Promise<TaskDetailDto> => {
-    const response = await apiClient.patch<TaskDetailDto>(`/tasks/${taskId}`, data);
-    return response.data;
+    const response = await apiClient.patch<ApiResponse<TaskDetailDto>>(`/tasks/${taskId}`, data);
+    return response.data.data;
   },
 
   /**
@@ -126,48 +127,48 @@ export const tasksApi = {
     queryParams.append('page', String(params.page || 1));
     queryParams.append('pageSize', String(params.pageSize || PAGINATION.DEFAULT_PAGE_SIZE));
 
-    const response = await apiClient.get<CommentListResponseDto>(
+    const response = await apiClient.get<ApiResponse<CommentListResponseDto>>(
       `/notices/${noticeId}/comments?${queryParams.toString()}`
     );
-    return response.data;
+    return response.data.data;
   },
 
   /**
    * Get comment by ID
    */
   getComment: async (commentId: string): Promise<CommentResponseDto> => {
-    const response = await apiClient.get<CommentResponseDto>(`/comments/${commentId}`);
-    return response.data;
+    const response = await apiClient.get<ApiResponse<CommentResponseDto>>(`/comments/${commentId}`);
+    return response.data.data;
   },
 
   /**
    * Create comment
    */
   createComment: async (noticeId: string, data: CreateCommentDto): Promise<CommentResponseDto> => {
-    const response = await apiClient.post<CommentResponseDto>(
+    const response = await apiClient.post<ApiResponse<CommentResponseDto>>(
       `/notices/${noticeId}/comments`,
       data
     );
-    return response.data;
+    return response.data.data;
   },
 
   /**
    * Reply to comment
    */
   replyToComment: async (commentId: string, data: CreateCommentDto): Promise<CommentResponseDto> => {
-    const response = await apiClient.post<CommentResponseDto>(
+    const response = await apiClient.post<ApiResponse<CommentResponseDto>>(
       `/comments/${commentId}/replies`,
       data
     );
-    return response.data;
+    return response.data.data;
   },
 
   /**
    * Update comment
    */
   updateComment: async (commentId: string, data: UpdateCommentDto): Promise<CommentResponseDto> => {
-    const response = await apiClient.patch<CommentResponseDto>(`/comments/${commentId}`, data);
-    return response.data;
+    const response = await apiClient.patch<ApiResponse<CommentResponseDto>>(`/comments/${commentId}`, data);
+    return response.data.data;
   },
 
   /**
@@ -181,11 +182,11 @@ export const tasksApi = {
    * Add reaction to comment
    */
   addReaction: async (commentId: string, emoji: string): Promise<CommentResponseDto> => {
-    const response = await apiClient.post<CommentResponseDto>(
+    const response = await apiClient.post<ApiResponse<CommentResponseDto>>(
       `/comments/${commentId}/reactions`,
       { emoji }
     );
-    return response.data;
+    return response.data.data;
   },
 
   /**
@@ -203,18 +204,18 @@ export const tasksApi = {
    * Get document requests for a notice
    */
   getDocumentRequests: async (noticeId: string): Promise<DocumentRequestListResponseDto> => {
-    const response = await apiClient.get<DocumentRequestListResponseDto>(
+    const response = await apiClient.get<ApiResponse<DocumentRequestListResponseDto>>(
       `/notices/${noticeId}/document-requests`
     );
-    return response.data;
+    return response.data.data;
   },
 
   /**
    * Get document request by ID
    */
   getDocumentRequest: async (requestId: string): Promise<DocumentRequestDto> => {
-    const response = await apiClient.get<DocumentRequestDto>(`/document-requests/${requestId}`);
-    return response.data;
+    const response = await apiClient.get<ApiResponse<DocumentRequestDto>>(`/document-requests/${requestId}`);
+    return response.data.data;
   },
 
   /**
@@ -224,11 +225,11 @@ export const tasksApi = {
     noticeId: string,
     data: CreateDocumentRequestDto
   ): Promise<DocumentRequestDto> => {
-    const response = await apiClient.post<DocumentRequestDto>(
+    const response = await apiClient.post<ApiResponse<DocumentRequestDto>>(
       `/notices/${noticeId}/document-requests`,
       data
     );
-    return response.data;
+    return response.data.data;
   },
 
   /**
@@ -238,11 +239,11 @@ export const tasksApi = {
     requestId: string,
     data: UpdateDocumentRequestDto
   ): Promise<DocumentRequestDto> => {
-    const response = await apiClient.patch<DocumentRequestDto>(
+    const response = await apiClient.patch<ApiResponse<DocumentRequestDto>>(
       `/document-requests/${requestId}`,
       data
     );
-    return response.data;
+    return response.data.data;
   },
 
   /**
@@ -268,7 +269,7 @@ export const tasksApi = {
     } as unknown as Blob);
     if (note) formData.append('note', note);
 
-    const response = await apiClient.post<DocumentRequestDto>(
+    const response = await apiClient.post<ApiResponse<DocumentRequestDto>>(
       `/document-requests/${requestId}/submissions`,
       formData,
       {
@@ -277,18 +278,18 @@ export const tasksApi = {
         },
       }
     );
-    return response.data;
+    return response.data.data;
   },
 
   /**
    * Fulfill document request
    */
   fulfillDocumentRequest: async (requestId: string, note?: string): Promise<DocumentRequestDto> => {
-    const response = await apiClient.post<DocumentRequestDto>(
+    const response = await apiClient.post<ApiResponse<DocumentRequestDto>>(
       `/document-requests/${requestId}/fulfill`,
       { note }
     );
-    return response.data;
+    return response.data.data;
   },
 
   // ============================================
@@ -306,10 +307,10 @@ export const tasksApi = {
     if (params.cursor) queryParams.append('cursor', params.cursor);
     if (params.limit) queryParams.append('limit', String(params.limit));
 
-    const response = await apiClient.get<ActivityFeedResponseDto>(
+    const response = await apiClient.get<ApiResponse<ActivityFeedResponseDto>>(
       `/notices/${noticeId}/activity?${queryParams.toString()}`
     );
-    return response.data;
+    return response.data.data;
   },
 
   /**
@@ -322,9 +323,9 @@ export const tasksApi = {
     if (params.cursor) queryParams.append('cursor', params.cursor);
     if (params.limit) queryParams.append('limit', String(params.limit));
 
-    const response = await apiClient.get<ActivityFeedResponseDto>(
+    const response = await apiClient.get<ApiResponse<ActivityFeedResponseDto>>(
       `/activity?${queryParams.toString()}`
     );
-    return response.data;
+    return response.data.data;
   },
 };

@@ -95,13 +95,7 @@ export interface MarkNotificationsReadRequest {
 
 // Unread count response
 export interface UnreadCountResponse {
-  count: number;
-  byPriority: {
-    critical: number;
-    high: number;
-    medium: number;
-    low: number;
-  };
+  unreadCount: number;
 }
 
 // User notification preferences

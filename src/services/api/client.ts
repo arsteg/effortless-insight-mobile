@@ -98,7 +98,9 @@ apiClient.interceptors.response.use(
           refreshToken,
         });
 
-        const { accessToken, refreshToken: newRefreshToken } = response.data;
+        // Backend wraps responses in { success, data }
+        const responseData = response.data.data || response.data;
+        const { accessToken, refreshToken: newRefreshToken } = responseData;
         await setTokens(accessToken, newRefreshToken);
 
         processQueue(null, accessToken);

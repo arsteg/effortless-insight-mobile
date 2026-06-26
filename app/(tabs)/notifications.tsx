@@ -188,7 +188,7 @@ export default function NotificationsScreen() {
   const deleteNotification = useDeleteNotification();
 
   const notifications = data?.notifications ?? [];
-  const unreadCount = unreadData?.count ?? 0;
+  const unreadCount = unreadData?.unreadCount ?? 0;
 
   const handleRefresh = useCallback(async () => {
     setRefreshing(true);

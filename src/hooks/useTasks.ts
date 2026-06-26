@@ -5,7 +5,7 @@
 
 import { useQuery, useMutation, useQueryClient, useInfiniteQuery } from '@tanstack/react-query';
 import { tasksApi } from '../services/api';
-import { cacheTasks } from '../services/storage/cache';
+import { cacheTasks, getCachedTasks } from '../services/storage/cache';
 import { useOfflineStore } from '../stores';
 import { useUIStore } from '../stores';
 import {
@@ -44,18 +44,37 @@ export function useMyTasksInfinite(
   return useInfiniteQuery({
     queryKey: taskKeys.myTasksList(params),
     queryFn: async ({ pageParam = 1 }) => {
-      const response = await tasksApi.getMyTasks({
-        ...params,
-        page: pageParam,
-        pageSize: PAGINATION.DEFAULT_PAGE_SIZE,
-      });
+      try {
+        const response = await tasksApi.getMyTasks({
+          ...params,
+          page: pageParam,
+          pageSize: PAGINATION.DEFAULT_PAGE_SIZE,
+        });
 
-      // Cache first page
-      if (pageParam === 1) {
-        await cacheTasks(response.tasks);
+        // Cache first page
+        if (pageParam === 1) {
+          await cacheTasks(response.tasks);
+        }
+
+        return response;
+      } catch (error) {
+        // Fallback to cached data when offline or on network error (first page only)
+        if (pageParam === 1) {
+          const cachedTasks = await getCachedTasks();
+          if (cachedTasks && cachedTasks.length > 0) {
+            return {
+              tasks: cachedTasks,
+              pagination: {
+                page: 1,
+                pageSize: cachedTasks.length,
+                totalCount: cachedTasks.length,
+                totalPages: 1,
+              },
+            };
+          }
+        }
+        throw error;
       }
-
-      return response;
     },
     initialPageParam: 1,
     getNextPageParam: (lastPage) => {
@@ -74,7 +93,26 @@ export function useMyTasksInfinite(
 export function useMyTasks(params: { status?: string; priority?: string; dueWithin?: string } = {}) {
   return useQuery({
     queryKey: taskKeys.myTasksList(params),
-    queryFn: () => tasksApi.getMyTasks(params),
+    queryFn: async () => {
+      try {
+        return await tasksApi.getMyTasks(params);
+      } catch (error) {
+        // Fallback to cached data when offline or on network error
+        const cachedTasks = await getCachedTasks();
+        if (cachedTasks && cachedTasks.length > 0) {
+          return {
+            tasks: cachedTasks,
+            pagination: {
+              page: 1,
+              pageSize: cachedTasks.length,
+              totalCount: cachedTasks.length,
+              totalPages: 1,
+            },
+          };
+        }
+        throw error;
+      }
+    },
   });
 }
 

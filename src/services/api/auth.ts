@@ -13,11 +13,19 @@ import {
   UserProfileDto,
   ForgotPasswordRequest,
   ResetPasswordRequest,
+  ChangePasswordRequest,
+  UpdateProfileRequest,
   TwoFactorLoginRequest,
   TwoFactorLoginResponse,
   TwoFactorRequiredResponse,
   SessionListResponse,
 } from '../../types';
+
+// API Response wrapper type (backend wraps all responses)
+interface ApiResponse<T> {
+  success: boolean;
+  data: T;
+}
 
 // Get device info for login tracking
 const getDeviceInfo = () => ({
@@ -37,24 +45,24 @@ export const authApi = {
       rememberMe,
       deviceInfo: getDeviceInfo(),
     };
-    const response = await apiClient.post<LoginResponse | TwoFactorRequiredResponse>('/auth/login', payload);
-    return response.data;
+    const response = await apiClient.post<ApiResponse<LoginResponse | TwoFactorRequiredResponse>>('/auth/login', payload);
+    return response.data.data;
   },
 
   /**
    * Register new user
    */
   register: async (data: RegisterRequest): Promise<RegisterResponse> => {
-    const response = await apiClient.post<RegisterResponse>('/auth/register', data);
-    return response.data;
+    const response = await apiClient.post<ApiResponse<RegisterResponse>>('/auth/register', data);
+    return response.data.data;
   },
 
   /**
    * Refresh access token
    */
   refreshToken: async (refreshToken: string): Promise<TokenResponse> => {
-    const response = await apiClient.post<TokenResponse>('/auth/refresh', { refreshToken });
-    return response.data;
+    const response = await apiClient.post<ApiResponse<TokenResponse>>('/auth/refresh', { refreshToken });
+    return response.data.data;
   },
 
   /**
@@ -68,16 +76,24 @@ export const authApi = {
    * Get current user profile
    */
   getProfile: async (): Promise<UserProfileDto> => {
-    const response = await apiClient.get<UserProfileDto>('/auth/me');
-    return response.data;
+    const response = await apiClient.get<ApiResponse<UserProfileDto>>('/auth/me');
+    return response.data.data;
   },
 
   /**
    * Update user profile
    */
-  updateProfile: async (data: Partial<UserProfileDto>): Promise<UserProfileDto> => {
-    const response = await apiClient.patch<UserProfileDto>('/auth/me', data);
-    return response.data;
+  updateProfile: async (data: UpdateProfileRequest): Promise<UserProfileDto> => {
+    const response = await apiClient.patch<ApiResponse<UserProfileDto>>('/auth/me', data);
+    return response.data.data;
+  },
+
+  /**
+   * Change password (authenticated user)
+   */
+  changePassword: async (data: ChangePasswordRequest): Promise<{ message: string }> => {
+    const response = await apiClient.put<ApiResponse<{ message: string }>>('/auth/change-password', data);
+    return response.data.data;
   },
 
   /**
@@ -85,48 +101,48 @@ export const authApi = {
    */
   forgotPassword: async (email: string): Promise<{ message: string }> => {
     const payload: ForgotPasswordRequest = { email };
-    const response = await apiClient.post<{ message: string }>('/auth/forgot-password', payload);
-    return response.data;
+    const response = await apiClient.post<ApiResponse<{ message: string }>>('/auth/forgot-password', payload);
+    return response.data.data;
   },
 
   /**
    * Reset password with token
    */
   resetPassword: async (data: ResetPasswordRequest): Promise<{ message: string }> => {
-    const response = await apiClient.post<{ message: string }>('/auth/reset-password', data);
-    return response.data;
+    const response = await apiClient.post<ApiResponse<{ message: string }>>('/auth/reset-password', data);
+    return response.data.data;
   },
 
   /**
    * Verify email with token
    */
   verifyEmail: async (token: string): Promise<{ message: string }> => {
-    const response = await apiClient.post<{ message: string }>('/auth/verify-email', { token });
-    return response.data;
+    const response = await apiClient.post<ApiResponse<{ message: string }>>('/auth/verify-email', { token });
+    return response.data.data;
   },
 
   /**
    * Request email verification resend
    */
   resendVerificationEmail: async (): Promise<{ message: string }> => {
-    const response = await apiClient.post<{ message: string }>('/auth/verify-email/resend');
-    return response.data;
+    const response = await apiClient.post<ApiResponse<{ message: string }>>('/auth/verify-email/resend');
+    return response.data.data;
   },
 
   /**
    * Complete 2FA login
    */
   twoFactorLogin: async (data: TwoFactorLoginRequest): Promise<TwoFactorLoginResponse> => {
-    const response = await apiClient.post<TwoFactorLoginResponse>('/auth/2fa/login', data);
-    return response.data;
+    const response = await apiClient.post<ApiResponse<TwoFactorLoginResponse>>('/auth/2fa/login', data);
+    return response.data.data;
   },
 
   /**
    * Get active sessions
    */
   getSessions: async (): Promise<SessionListResponse> => {
-    const response = await apiClient.get<SessionListResponse>('/auth/sessions');
-    return response.data;
+    const response = await apiClient.get<ApiResponse<SessionListResponse>>('/auth/sessions');
+    return response.data.data;
   },
 
   /**
@@ -140,8 +156,8 @@ export const authApi = {
    * Switch organization context
    */
   switchOrganization: async (organizationId: string): Promise<TokenResponse> => {
-    const response = await apiClient.post<TokenResponse>('/auth/switch-organization', { organizationId });
-    return response.data;
+    const response = await apiClient.post<ApiResponse<TokenResponse>>('/auth/switch-organization', { organizationId });
+    return response.data.data;
   },
 
   /**

@@ -55,6 +55,7 @@ export interface NoticeAiReportDto {
   summaryEn?: string;
   summaryHi?: string;
   plainEnglish?: string;
+  plainHindi?: string;
   actionItems?: ActionItemDto[];
   requiredDocuments?: RequiredDocumentDto[];
   legalReferences?: LegalReferenceDto[];
@@ -160,6 +161,54 @@ export interface NoticeQueryParams {
   dueAfter?: string;
   sortBy?: 'createdAt' | 'responseDeadline' | 'riskScore' | 'taxAmount';
   sortOrder?: 'asc' | 'desc';
+}
+
+// Response Types
+export type NoticeResponseStatus = 'draft' | 'pending_review' | 'approved' | 'submitted' | 'rejected';
+
+export interface ResponseDto {
+  id: string;
+  noticeId: string;
+  version: number;
+  status: NoticeResponseStatus;
+  content: string;
+  createdById: string;
+  createdByName?: string;
+  reviewedById?: string;
+  reviewedByName?: string;
+  submittedById?: string;
+  submittedByName?: string;
+  reviewNotes?: string;
+  submissionReference?: string;
+  submittedAt?: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface ResponseListResponse {
+  responses: ResponseDto[];
+  totalCount: number;
+}
+
+export interface SaveDraftRequest {
+  content: string;
+}
+
+export interface SubmitForReviewRequest {
+  notes?: string;
+}
+
+export interface ApproveResponseRequest {
+  notes?: string;
+}
+
+export interface RejectResponseRequest {
+  notes: string;
+}
+
+export interface MarkSubmittedRequest {
+  submissionReference?: string;
+  submittedAt?: string;
 }
 
 // Workflow

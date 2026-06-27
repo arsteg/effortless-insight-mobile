@@ -18,6 +18,7 @@ export const STORAGE_KEYS = {
   REFRESH_TOKEN: "auth_refresh_token",
   USER: "auth_user",
   BIOMETRIC_ENABLED: "biometric_enabled",
+  DARK_MODE_ENABLED: "dark_mode_enabled",
   CACHED_NOTICES: "cached_notices",
   CACHED_TASKS: "cached_tasks",
   CACHED_PLANS: "cached_plans",

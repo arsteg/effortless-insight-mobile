@@ -31,7 +31,7 @@ import {
 } from 'lucide-react-native';
 import * as WebBrowser from 'expo-web-browser';
 import * as Linking from 'expo-linking';
-import { useAuthStore, useOfflineStore } from '../../src/stores';
+import { useAuthStore, useOfflineStore, useUIStore } from '../../src/stores';
 import { useTranslation } from '../../src/hooks';
 import { Button, LoadingSpinner } from '../../src/components/common';
 import { COLORS, SPACING, FONT_SIZES, BORDER_RADIUS } from '../../src/utils/constants';
@@ -51,10 +51,10 @@ export default function ProfileScreen() {
 
   const { queueTotal, clearAllCache, clearAllQueue, loadCacheStatus, loadQueueStatus } =
     useOfflineStore();
+  const { darkModeEnabled, setDarkModeEnabled, initializeTheme } = useUIStore();
   const { t, locale, isHindi } = useTranslation();
 
   const [notificationsEnabled, setNotificationsEnabled] = useState(true);
-  const [darkModeEnabled, setDarkModeEnabled] = useState(false);
 
   const handleLanguage = () => {
     router.push('/settings/language');
@@ -63,6 +63,7 @@ export default function ProfileScreen() {
   React.useEffect(() => {
     loadCacheStatus();
     loadQueueStatus();
+    initializeTheme();
   }, []);
 
   const handleLogout = () => {

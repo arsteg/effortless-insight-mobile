@@ -4,7 +4,9 @@
  */
 
 import { create } from 'zustand';
+import { Appearance, ColorSchemeName } from 'react-native';
 import NetInfo, { NetInfoState } from '@react-native-community/netinfo';
+import { getDarkModeEnabled, setDarkModeEnabled as persistDarkMode } from '../services/storage/secure';
 
 interface Toast {
   id: string;
@@ -17,6 +19,10 @@ interface UIState {
   // Connectivity
   isOnline: boolean;
   connectionType: string | null;
+
+  // Theme
+  darkModeEnabled: boolean;
+  colorScheme: ColorSchemeName;
 
   // Loading states
   globalLoading: boolean;
@@ -31,6 +37,8 @@ interface UIState {
 
   // Actions
   initializeNetInfo: () => () => void;
+  initializeTheme: () => Promise<void>;
+  setDarkModeEnabled: (enabled: boolean) => Promise<void>;
   setOnlineStatus: (isOnline: boolean, connectionType?: string | null) => void;
   setGlobalLoading: (loading: boolean, message?: string | null) => void;
   showToast: (type: Toast['type'], message: string, duration?: number) => void;
@@ -43,11 +51,37 @@ export const useUIStore = create<UIState>((set, get) => ({
   // Initial state
   isOnline: true,
   connectionType: null,
+  darkModeEnabled: false,
+  colorScheme: Appearance.getColorScheme(),
   globalLoading: false,
   loadingMessage: null,
   toasts: [],
   activeModal: null,
   modalData: null,
+
+  /**
+   * Initialize theme from storage
+   */
+  initializeTheme: async () => {
+    const enabled = await getDarkModeEnabled();
+    set({ darkModeEnabled: enabled });
+    // Apply theme to system appearance (for supported components)
+    if (enabled) {
+      Appearance.setColorScheme('dark');
+    } else {
+      Appearance.setColorScheme('light');
+    }
+  },
+
+  /**
+   * Toggle dark mode and persist to storage
+   */
+  setDarkModeEnabled: async (enabled: boolean) => {
+    await persistDarkMode(enabled);
+    set({ darkModeEnabled: enabled });
+    // Apply theme to system appearance
+    Appearance.setColorScheme(enabled ? 'dark' : 'light');
+  },
 
   /**
    * Initialize network info listener

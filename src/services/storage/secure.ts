@@ -127,6 +127,21 @@ export async function getBiometricEnabled(): Promise<boolean> {
 }
 
 /**
+ * Store dark mode preference
+ */
+export async function setDarkModeEnabled(enabled: boolean): Promise<void> {
+  await setItem(STORAGE_KEYS.DARK_MODE_ENABLED, String(enabled));
+}
+
+/**
+ * Get dark mode preference
+ */
+export async function getDarkModeEnabled(): Promise<boolean> {
+  const value = await getItem(STORAGE_KEYS.DARK_MODE_ENABLED);
+  return value === 'true';
+}
+
+/**
  * Store push notification token
  */
 export async function setPushToken(token: string): Promise<void> {

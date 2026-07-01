@@ -19,6 +19,10 @@ import {
   TwoFactorLoginResponse,
   TwoFactorRequiredResponse,
   SessionListResponse,
+  OAuthProvidersResponse,
+  OAuthLoginUrlResponse,
+  OAuthCallbackRequest,
+  OAuthCallbackResponse,
 } from '../../types';
 
 // API Response wrapper type (backend wraps all responses)
@@ -177,5 +181,55 @@ export const authApi = {
     await apiClient.delete('/notifications/unregister', {
       data: { token },
     });
+  },
+
+  // ============================================
+  // OAuth Methods
+  // ============================================
+
+  /**
+   * Get enabled OAuth providers
+   */
+  getOAuthProviders: async (): Promise<OAuthProvidersResponse> => {
+    const response = await apiClient.get<ApiResponse<OAuthProvidersResponse>>('/auth/oauth/providers');
+    return response.data.data;
+  },
+
+  /**
+   * Get OAuth login URL for a provider
+   */
+  getOAuthLoginUrl: async (
+    provider: string,
+    options?: { state?: string; forceReauth?: boolean; redirectUri?: string }
+  ): Promise<OAuthLoginUrlResponse> => {
+    const params = new URLSearchParams();
+    if (options?.state) params.append('state', options.state);
+    if (options?.forceReauth) params.append('forceReauth', 'true');
+    if (options?.redirectUri) params.append('redirectUri', options.redirectUri);
+    // Always pass platform for mobile
+    params.append('platform', Platform.OS);
+
+    const queryString = params.toString();
+    const url = `/auth/oauth/${provider}/login${queryString ? `?${queryString}` : ''}`;
+
+    const response = await apiClient.get<ApiResponse<OAuthLoginUrlResponse>>(url);
+    return response.data.data;
+  },
+
+  /**
+   * Handle OAuth callback
+   */
+  handleOAuthCallback: async (
+    provider: string,
+    data: OAuthCallbackRequest
+  ): Promise<OAuthCallbackResponse> => {
+    const response = await apiClient.post<ApiResponse<OAuthCallbackResponse>>(
+      `/auth/oauth/${provider}/callback`,
+      {
+        ...data,
+        deviceInfo: getDeviceInfo(),
+      }
+    );
+    return response.data.data;
   },
 };

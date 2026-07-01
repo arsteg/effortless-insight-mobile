@@ -11,7 +11,6 @@ import {
   TouchableOpacity,
   KeyboardAvoidingView,
   Platform,
-  Alert,
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useForm, Controller } from 'react-hook-form';
@@ -20,7 +19,9 @@ import { z } from 'zod';
 import { Mail, Lock, Fingerprint } from 'lucide-react-native';
 import { useAuthStore } from '../../src/stores';
 import { Button, Input } from '../../src/components/common';
+import { OAuthButtons } from '../../src/components/auth';
 import { getApiErrorMessage } from '../../src/services/api';
+import { setTokens, setUser } from '../../src/services/storage/secure';
 import { COLORS, SPACING, FONT_SIZES, BORDER_RADIUS } from '../../src/utils/constants';
 
 const loginSchema = z.object({
@@ -91,6 +92,54 @@ export default function LoginScreen() {
       const message = getApiErrorMessage(err);
       setError(message);
     }
+  };
+
+  // Handle OAuth success
+  const handleOAuthSuccess = async (response: {
+    accessToken: string;
+    refreshToken: string;
+    user: any;
+    requires2fa?: boolean;
+    partialToken?: string;
+  }) => {
+    try {
+      setError(null);
+
+      // Check if 2FA is required
+      if (response.requires2fa && response.partialToken) {
+        // Store partial token and navigate to 2FA screen
+        useAuthStore.setState({
+          requires2fa: true,
+          partialToken: response.partialToken,
+        });
+        router.push('/(auth)/two-factor');
+        return;
+      }
+
+      // Store tokens and user
+      await setTokens(response.accessToken, response.refreshToken);
+      await setUser(response.user);
+
+      // Update auth store
+      useAuthStore.setState({
+        isAuthenticated: true,
+        user: response.user,
+        requires2fa: false,
+        partialToken: null,
+        needsOnboarding: !response.user?.organization?.id,
+      });
+
+      // Navigate to main app
+      router.replace('/(tabs)');
+    } catch (err) {
+      const message = getApiErrorMessage(err);
+      setError(message);
+    }
+  };
+
+  // Handle OAuth error
+  const handleOAuthError = (errorMessage: string) => {
+    setError(errorMessage);
   };
 
   return (
@@ -194,12 +243,13 @@ export default function LoginScreen() {
             </TouchableOpacity>
           )}
 
-          {/* Divider */}
-          <View style={styles.divider}>
-            <View style={styles.dividerLine} />
-            <Text style={styles.dividerText}>OR</Text>
-            <View style={styles.dividerLine} />
-          </View>
+          {/* OAuth Buttons */}
+          <OAuthButtons
+            mode="login"
+            disabled={isLoading}
+            onSuccess={handleOAuthSuccess}
+            onError={handleOAuthError}
+          />
 
           {/* Register Link */}
           <View style={styles.registerContainer}>
@@ -325,6 +375,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'center',
     alignItems: 'center',
+    marginTop: SPACING.lg,
   },
   registerText: {
     fontSize: FONT_SIZES.md,

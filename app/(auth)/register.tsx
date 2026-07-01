@@ -17,8 +17,11 @@ import { useForm, Controller } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import { Mail, Lock, User, Phone } from 'lucide-react-native';
+import { useAuthStore } from '../../src/stores';
 import { authApi, getApiErrorMessage } from '../../src/services/api';
 import { Button, Input } from '../../src/components/common';
+import { OAuthButtons } from '../../src/components/auth';
+import { setTokens, setUser } from '../../src/services/storage/secure';
 import { COLORS, SPACING, FONT_SIZES, BORDER_RADIUS } from '../../src/utils/constants';
 
 const registerSchema = z
@@ -88,6 +91,53 @@ export default function RegisterScreen() {
     } finally {
       setIsLoading(false);
     }
+  };
+
+  // Handle OAuth success (also works for registration via OAuth)
+  const handleOAuthSuccess = async (response: {
+    accessToken: string;
+    refreshToken: string;
+    user: any;
+    requires2fa?: boolean;
+    partialToken?: string;
+  }) => {
+    try {
+      setError(null);
+
+      // Check if 2FA is required
+      if (response.requires2fa && response.partialToken) {
+        useAuthStore.setState({
+          requires2fa: true,
+          partialToken: response.partialToken,
+        });
+        router.push('/(auth)/two-factor');
+        return;
+      }
+
+      // Store tokens and user
+      await setTokens(response.accessToken, response.refreshToken);
+      await setUser(response.user);
+
+      // Update auth store
+      useAuthStore.setState({
+        isAuthenticated: true,
+        user: response.user,
+        requires2fa: false,
+        partialToken: null,
+        needsOnboarding: !response.user?.organization?.id,
+      });
+
+      // Navigate to main app
+      router.replace('/(tabs)');
+    } catch (err) {
+      const message = getApiErrorMessage(err);
+      setError(message);
+    }
+  };
+
+  // Handle OAuth error
+  const handleOAuthError = (errorMessage: string) => {
+    setError(errorMessage);
   };
 
   if (success) {
@@ -258,6 +308,14 @@ export default function RegisterScreen() {
             loading={isLoading}
             fullWidth
             size="lg"
+          />
+
+          {/* OAuth Buttons */}
+          <OAuthButtons
+            mode="register"
+            disabled={isLoading}
+            onSuccess={handleOAuthSuccess}
+            onError={handleOAuthError}
           />
 
           {/* Login Link */}

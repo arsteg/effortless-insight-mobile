@@ -196,6 +196,37 @@ export interface UpdateProfileRequest {
   avatarUrl?: string;
 }
 
+// OAuth Types
+export interface OAuthProviderInfo {
+  name: string;
+  displayName: string;
+  enabled: boolean;
+}
+
+export interface OAuthProvidersResponse {
+  providers: OAuthProviderInfo[];
+}
+
+export interface OAuthLoginUrlResponse {
+  loginUrl: string;
+  state: string;
+}
+
+export interface OAuthCallbackRequest {
+  code: string;
+  state: string;
+}
+
+export interface OAuthCallbackResponse {
+  accessToken: string;
+  refreshToken: string;
+  tokenType: string;
+  expiresIn: number;
+  user: UserDto;
+  requires2fa?: boolean;
+  partialToken?: string;
+}
+
 // Auth State
 export interface AuthState {
   isAuthenticated: boolean;

@@ -28,6 +28,7 @@ import {
   Trash2,
   ExternalLink,
   CreditCard,
+  Link2,
 } from 'lucide-react-native';
 import * as WebBrowser from 'expo-web-browser';
 import * as Linking from 'expo-linking';
@@ -223,6 +224,11 @@ export default function ProfileScreen() {
           label="Organization"
           value={user?.organization?.name}
           onPress={handleOrganization}
+        />
+        <SettingItem
+          icon={<Link2 size={20} color={COLORS.gray[500]} />}
+          label="GST Portal Integration"
+          onPress={() => router.push('/settings/integrations')}
         />
       </View>
 

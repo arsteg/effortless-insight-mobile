@@ -14,10 +14,10 @@ import {
   RefreshControl,
 } from 'react-native';
 import { useRouter, useLocalSearchParams } from 'expo-router';
-import { Search, Filter, FileText, Clock, AlertCircle, ChevronDown } from 'lucide-react-native';
+import { Search, Filter, FileText, Clock, AlertCircle, ChevronDown, Zap, Upload, Edit3 } from 'lucide-react-native';
 import { useNoticesInfinite } from '../../src/hooks/useNotices';
 import { LoadingSpinner, EmptyState } from '../../src/components/common';
-import { NoticeDto, NoticeStatus, NoticePriority } from '../../src/types';
+import { NoticeDto, NoticeStatus, NoticePriority, NoticeSource } from '../../src/types';
 import { COLORS, SPACING, FONT_SIZES, BORDER_RADIUS, RISK_COLORS, STATUS_COLORS } from '../../src/utils/constants';
 
 const STATUS_OPTIONS: { label: string; value: NoticeStatus | 'all' }[] = [
@@ -228,12 +228,31 @@ function NoticeCard({
     return `₹${amount.toLocaleString()}`;
   };
 
+  const getSourceConfig = (source?: NoticeSource) => {
+    switch (source) {
+      case 'gstn_portal':
+        return { icon: Zap, color: COLORS.success, label: 'Portal' };
+      case 'manual':
+        return { icon: Edit3, color: COLORS.gray[500], label: 'Manual' };
+      default:
+        return { icon: Upload, color: COLORS.info, label: 'Upload' };
+    }
+  };
+
+  const sourceConfig = getSourceConfig(notice.source);
+  const SourceIcon = sourceConfig.icon;
+
   return (
     <TouchableOpacity style={styles.noticeCard} onPress={onPress}>
       <View style={styles.noticeHeader}>
         <View style={styles.noticeTypeContainer}>
           <FileText size={20} color={COLORS.gray[500]} />
           <Text style={styles.noticeType}>{notice.noticeType || 'Notice'}</Text>
+          {notice.source === 'gstn_portal' && (
+            <View style={styles.sourceBadge}>
+              <SourceIcon size={12} color={sourceConfig.color} />
+            </View>
+          )}
         </View>
         <View style={[styles.statusBadge, { backgroundColor: getStatusColor(notice.status) }]}>
           <Text style={styles.statusText}>
@@ -386,6 +405,12 @@ const styles = StyleSheet.create({
     fontSize: FONT_SIZES.md,
     fontWeight: '600',
     color: COLORS.gray[900],
+  },
+  sourceBadge: {
+    marginLeft: SPACING.xs,
+    padding: 4,
+    borderRadius: BORDER_RADIUS.full,
+    backgroundColor: `${COLORS.success}15`,
   },
   statusBadge: {
     paddingHorizontal: SPACING.sm,

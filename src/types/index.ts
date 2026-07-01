@@ -9,3 +9,4 @@ export * from './task';
 export * from './notification';
 export * from './billing';
 export * from './organization';
+export * from './gstn';

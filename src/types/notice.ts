@@ -11,6 +11,9 @@ import {
   PaginationDto
 } from './api';
 
+// Notice source types
+export type NoticeSource = 'upload' | 'manual' | 'gstn_portal';
+
 // Notice List Item
 export interface NoticeDto {
   id: string;
@@ -31,6 +34,8 @@ export interface NoticeDto {
   assignedToId?: string;
   assignedToName?: string;
   createdAt: string;
+  source?: NoticeSource;
+  gstnNoticeId?: string;
 }
 
 // Notice Detail

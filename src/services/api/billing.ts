@@ -13,6 +13,23 @@ import {
   VerifyPaymentRequest,
   VerifyPaymentResponse,
   PaywallAction,
+  ChangePlanRequest,
+  ChangePlanResponse,
+  CancelSubscriptionRequest,
+  CancelSubscriptionResponse,
+  PauseSubscriptionRequest,
+  PauseSubscriptionResponse,
+  ResumeSubscriptionResponse,
+  AddSeatsRequest,
+  AddSeatsResponse,
+  SubscriptionDto,
+  PaymentRetryResponse,
+  InvoiceListResponse,
+  InvoiceDetailDto,
+  PaymentMethodListResponse,
+  PaymentMethodDto,
+  ValidateCouponRequest,
+  ValidateCouponResponse,
 } from '../../types';
 
 // API Response wrapper type (backend wraps all responses)
@@ -132,5 +149,165 @@ export const billingApi = {
       }
       throw error;
     }
+  },
+
+  // ============================================================================
+  // Plan Management
+  // ============================================================================
+
+  /**
+   * Change subscription plan (upgrade/downgrade)
+   */
+  changePlan: async (data: ChangePlanRequest): Promise<ChangePlanResponse> => {
+    const response = await apiClient.put<ApiResponse<ChangePlanResponse>>(
+      '/subscriptions/current/plan',
+      data
+    );
+    return response.data.data;
+  },
+
+  /**
+   * Cancel subscription
+   */
+  cancelSubscription: async (data: CancelSubscriptionRequest): Promise<CancelSubscriptionResponse> => {
+    const response = await apiClient.delete<ApiResponse<CancelSubscriptionResponse>>(
+      '/subscriptions/current',
+      { data }
+    );
+    return response.data.data;
+  },
+
+  /**
+   * Pause subscription
+   */
+  pauseSubscription: async (data: PauseSubscriptionRequest): Promise<PauseSubscriptionResponse> => {
+    const response = await apiClient.post<ApiResponse<PauseSubscriptionResponse>>(
+      '/subscriptions/current/pause',
+      data
+    );
+    return response.data.data;
+  },
+
+  /**
+   * Resume a paused subscription
+   */
+  resumeSubscription: async (): Promise<ResumeSubscriptionResponse> => {
+    const response = await apiClient.post<ApiResponse<ResumeSubscriptionResponse>>(
+      '/subscriptions/current/resume'
+    );
+    return response.data.data;
+  },
+
+  /**
+   * Reactivate a cancelled subscription
+   */
+  reactivateSubscription: async (): Promise<SubscriptionDto> => {
+    const response = await apiClient.post<ApiResponse<SubscriptionDto>>(
+      '/subscriptions/current/reactivate'
+    );
+    return response.data.data;
+  },
+
+  /**
+   * Add additional seats to subscription
+   */
+  addSeats: async (data: AddSeatsRequest): Promise<AddSeatsResponse> => {
+    const response = await apiClient.post<ApiResponse<AddSeatsResponse>>(
+      '/subscriptions/current/seats',
+      data
+    );
+    return response.data.data;
+  },
+
+  /**
+   * Retry failed payment for past_due subscription
+   */
+  retryPayment: async (): Promise<PaymentRetryResponse> => {
+    const response = await apiClient.post<ApiResponse<PaymentRetryResponse>>(
+      '/subscriptions/current/retry-payment'
+    );
+    return response.data.data;
+  },
+
+  // ============================================================================
+  // Invoices
+  // ============================================================================
+
+  /**
+   * Get organization's invoices
+   */
+  getInvoices: async (page = 1, limit = 10): Promise<InvoiceListResponse> => {
+    const response = await apiClient.get<ApiResponse<InvoiceListResponse>>(
+      '/invoices',
+      { params: { page, limit } }
+    );
+    return response.data.data;
+  },
+
+  /**
+   * Get a specific invoice
+   */
+  getInvoice: async (invoiceId: string): Promise<InvoiceDetailDto> => {
+    const response = await apiClient.get<ApiResponse<InvoiceDetailDto>>(
+      `/invoices/${invoiceId}`
+    );
+    return response.data.data;
+  },
+
+  /**
+   * Download invoice PDF
+   * Returns the PDF as a blob for saving/sharing
+   */
+  downloadInvoicePdf: async (invoiceId: string): Promise<Blob> => {
+    const response = await apiClient.get(`/invoices/${invoiceId}/pdf`, {
+      responseType: 'blob',
+    });
+    return response.data;
+  },
+
+  // ============================================================================
+  // Payment Methods
+  // ============================================================================
+
+  /**
+   * Get saved payment methods
+   */
+  getPaymentMethods: async (): Promise<PaymentMethodListResponse> => {
+    const response = await apiClient.get<ApiResponse<PaymentMethodListResponse>>(
+      '/payment-methods'
+    );
+    return response.data.data;
+  },
+
+  /**
+   * Set a payment method as default
+   */
+  setDefaultPaymentMethod: async (paymentMethodId: string): Promise<PaymentMethodDto> => {
+    const response = await apiClient.post<ApiResponse<PaymentMethodDto>>(
+      `/payment-methods/${paymentMethodId}/set-default`
+    );
+    return response.data.data;
+  },
+
+  /**
+   * Delete a payment method
+   */
+  deletePaymentMethod: async (paymentMethodId: string): Promise<void> => {
+    await apiClient.delete(`/payment-methods/${paymentMethodId}`);
+  },
+
+  // ============================================================================
+  // Coupons
+  // ============================================================================
+
+  /**
+   * Validate a coupon code
+   */
+  validateCoupon: async (data: ValidateCouponRequest): Promise<ValidateCouponResponse> => {
+    const response = await apiClient.post<ApiResponse<ValidateCouponResponse>>(
+      '/coupons/validate',
+      data
+    );
+    return response.data.data;
   },
 };

@@ -18,9 +18,11 @@
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "com.effortlessinsight.app",
+      "googleServicesFile": "./GoogleService-Info.plist",
       "infoPlist": {
         "NSCameraUsageDescription": "EffortlessInsight needs camera access to scan GST notices",
-        "NSPhotoLibraryUsageDescription": "EffortlessInsight needs photo library access to upload notice images"
+        "NSPhotoLibraryUsageDescription": "EffortlessInsight needs photo library access to upload notice images",
+        "UIBackgroundModes": ["remote-notification"]
       }
     },
     "android": {
@@ -29,9 +31,12 @@
         "backgroundColor": "#0ea5e9"
       },
       "package": "com.effortlessinsight.app",
+      "googleServicesFile": "./google-services.json",
       "permissions": [
         "android.permission.CAMERA",
-        "android.permission.READ_EXTERNAL_STORAGE"
+        "android.permission.READ_EXTERNAL_STORAGE",
+        "android.permission.RECEIVE_BOOT_COMPLETED",
+        "android.permission.VIBRATE"
       ]
     },
     "web": {
@@ -47,7 +52,9 @@
         "expo-notifications",
         {
           "icon": "./assets/notification-icon.png",
-          "color": "#0ea5e9"
+          "color": "#0ea5e9",
+          "defaultChannel": "default",
+          "sounds": ["./assets/sounds/notification.wav"]
         }
       ],
       "expo-secure-store",

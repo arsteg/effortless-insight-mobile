@@ -12,9 +12,14 @@ export type BillingCycle = 'monthly' | 'annually';
 export type SubscriptionStatus =
   | 'trialing'
   | 'active'
+  | 'paused'
   | 'past_due'
   | 'cancelled'
   | 'expired';
+
+export type InvoiceStatus = 'draft' | 'pending' | 'paid' | 'void' | 'refunded';
+
+export type PaymentMethodType = 'card' | 'upi' | 'netbanking' | 'wallet';
 
 // ============================================================================
 // Plan Types
@@ -282,4 +287,223 @@ export interface PaywallState {
   limit: number | null;
   suggestedPlan: string | null;
   message: string;
+}
+
+// ============================================================================
+// Plan Change Types
+// ============================================================================
+
+export interface ChangePlanRequest {
+  newPlanCode: string;
+  billingCycle: BillingCycle;
+  additionalSeats?: number;
+  effectiveDate: 'immediate' | 'period_end';
+}
+
+export interface ChangePlanResponse {
+  type: 'upgrade' | 'downgrade';
+  prorationAmount: number | null;
+  newPlanAmount: number | null;
+  totalDue: number | null;
+  effectiveImmediately: boolean;
+  razorpayOrder: RazorpayOrderDto | null;
+  scheduledPlanCode: string | null;
+  effectiveDate: string | null;
+  message: string | null;
+}
+
+// ============================================================================
+// Cancel Subscription Types
+// ============================================================================
+
+export interface CancelSubscriptionRequest {
+  reason: string;
+  feedback?: string;
+  cancelImmediately: boolean;
+}
+
+export interface SubscriptionCancelledDto {
+  id: string;
+  status: string;
+  cancelAtPeriodEnd: boolean;
+  cancellationDate: string | null;
+}
+
+export interface CancelSubscriptionResponse {
+  subscription: SubscriptionCancelledDto;
+  message: string;
+}
+
+// ============================================================================
+// Pause/Resume Subscription Types
+// ============================================================================
+
+export interface PauseSubscriptionRequest {
+  reason: string;
+  resumeAt?: string;
+}
+
+export interface PauseSubscriptionResponse {
+  subscriptionId: string;
+  status: string;
+  pausedAt: string | null;
+  scheduledResumeAt: string | null;
+}
+
+export interface ResumeSubscriptionResponse {
+  subscriptionId: string;
+  status: string;
+  currentPeriodEnd: string;
+}
+
+// ============================================================================
+// Add Seats Types
+// ============================================================================
+
+export interface AddSeatsRequest {
+  additionalSeats: number;
+}
+
+export interface AddSeatsResponse {
+  totalSeats: number;
+  prorationAmount: number;
+  razorpayOrder: RazorpayOrderDto | null;
+}
+
+// ============================================================================
+// Reactivate Subscription Types
+// ============================================================================
+
+export interface ReactivateSubscriptionResponse {
+  subscription: SubscriptionDto;
+}
+
+// ============================================================================
+// Payment Retry Types
+// ============================================================================
+
+export interface PaymentRetryResponse {
+  success: boolean;
+  message: string;
+  newStatus: SubscriptionStatus;
+  nextBillingDate: string | null;
+}
+
+// ============================================================================
+// Invoice Types
+// ============================================================================
+
+export interface InvoiceDto {
+  id: string;
+  number: string;
+  date: string;
+  dueDate: string;
+  status: InvoiceStatus;
+  subtotal: number;
+  discount: number;
+  tax: number;
+  total: number;
+  currency: string;
+  description: string | null;
+  pdfUrl: string;
+}
+
+export interface InvoiceBillingDetailsDto {
+  organizationName: string;
+  gstin: string | null;
+  address: string;
+  city: string | null;
+  state: string;
+  stateCode: string | null;
+  pincode: string;
+  country: string;
+  email: string | null;
+  phone: string | null;
+}
+
+export interface InvoiceLineItemDto {
+  type: string;
+  description: string;
+  quantity: number;
+  unitPrice: number;
+  amount: number;
+  hsnCode: string | null;
+  periodStart: string | null;
+  periodEnd: string | null;
+}
+
+export interface InvoiceDetailDto extends InvoiceDto {
+  discountDescription: string | null;
+  taxRate: number;
+  taxAmount: number;
+  cgstAmount: number | null;
+  sgstAmount: number | null;
+  igstAmount: number | null;
+  amountPaid: number;
+  amountDue: number;
+  hsnCode: string;
+  placeOfSupply: string | null;
+  isInterState: boolean;
+  billingDetails: InvoiceBillingDetailsDto;
+  lineItems: InvoiceLineItemDto[];
+  notes: string | null;
+  paidAt: string | null;
+}
+
+export interface BillingPaginationDto {
+  page: number;
+  limit: number;
+  total: number;
+  totalPages: number;
+}
+
+export interface InvoiceListResponse {
+  invoices: InvoiceDto[];
+  pagination: BillingPaginationDto;
+}
+
+// ============================================================================
+// Payment Method Types
+// ============================================================================
+
+export interface PaymentMethodDto {
+  id: string;
+  type: PaymentMethodType;
+  isDefault: boolean;
+  cardLast4: string | null;
+  cardBrand: string | null;
+  cardExpiryMonth: number | null;
+  cardExpiryYear: number | null;
+  cardName: string | null;
+  upiId: string | null;
+  lastUsedAt: string | null;
+}
+
+export interface PaymentMethodListResponse {
+  paymentMethods: PaymentMethodDto[];
+}
+
+// ============================================================================
+// Coupon Types
+// ============================================================================
+
+export interface ValidateCouponRequest {
+  code: string;
+  planCode: string;
+  billingCycle: BillingCycle;
+}
+
+export interface CouponDetailsDto {
+  code: string;
+  description: string | null;
+  discountType: 'percent' | 'fixed' | 'percentage';
+  discountValue: number;
+  maxDiscountAmount: number | null;
+  calculatedDiscount: number;
+}
+
+export interface ValidateCouponResponse {
+  isValid: boolean;
+  errorMessage: string | null;
+  coupon: CouponDetailsDto | null;
 }

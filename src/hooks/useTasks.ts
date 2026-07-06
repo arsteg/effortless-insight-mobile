@@ -67,7 +67,7 @@ export function useMyTasksInfinite(
               pagination: {
                 page: 1,
                 pageSize: cachedTasks.length,
-                totalCount: cachedTasks.length,
+                totalItems: cachedTasks.length,
                 totalPages: 1,
               },
             };
@@ -105,7 +105,7 @@ export function useMyTasks(params: { status?: string; priority?: string; dueWith
             pagination: {
               page: 1,
               pageSize: cachedTasks.length,
-              totalCount: cachedTasks.length,
+              totalItems: cachedTasks.length,
               totalPages: 1,
             },
           };

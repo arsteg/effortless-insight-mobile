@@ -5,7 +5,7 @@
  * Uses base64 encoding to create a multi-page PDF.
  */
 
-import * as FileSystem from 'expo-file-system';
+import * as FileSystem from 'expo-file-system/legacy';
 import * as ImageManipulator from 'expo-image-manipulator';
 
 interface ScannedPage {

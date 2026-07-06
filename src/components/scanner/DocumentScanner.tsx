@@ -77,7 +77,7 @@ export function DocumentScanner({
   const pulseAnim = useRef(new Animated.Value(1)).current;
 
   // Countdown timer for auto-capture
-  const countdownRef = useRef<NodeJS.Timeout | null>(null);
+  const countdownRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   // Pulse animation for frame
   useEffect(() => {
@@ -348,7 +348,7 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   edgeOverlay: {
-    ...StyleSheet.absoluteFillObject,
+    ...StyleSheet.absoluteFill,
     justifyContent: 'center',
     alignItems: 'center',
     padding: SPACING.xl,

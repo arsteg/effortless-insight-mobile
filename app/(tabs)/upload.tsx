@@ -337,20 +337,16 @@ export default function UploadScreen() {
         }
 
         const pdfResult = await generatePdfFromPages(pages);
-        if (!pdfResult.success) {
-          throw new Error(pdfResult.error);
+        if (!pdfResult.success || !pdfResult.pdfUri) {
+          throw new Error(pdfResult.error || 'PDF generation failed');
         }
 
-        // Upload as multi-page document
+        // Upload the generated PDF
         await uploadMutation.mutateAsync({
-          files: pages.map((p, i) => ({
-            uri: p.uri,
-            type: 'image/jpeg',
-            name: `notice_page_${i + 1}_${Date.now()}.jpg`,
-          })),
-          metadata: {
-            pageCount: pages.length,
-            isMultiPage: true,
+          file: {
+            uri: pdfResult.pdfUri,
+            type: 'application/pdf',
+            name: `notice_${Date.now()}.pdf`,
           },
           onProgress: setUploadProgress,
         });
@@ -1112,7 +1108,7 @@ const styles = StyleSheet.create({
     marginTop: SPACING.xs,
   },
   enhancingOverlay: {
-    ...StyleSheet.absoluteFillObject,
+    ...StyleSheet.absoluteFill,
     backgroundColor: 'rgba(0,0,0,0.7)',
     justifyContent: 'center',
     alignItems: 'center',

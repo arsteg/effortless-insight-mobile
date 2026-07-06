@@ -356,21 +356,6 @@ const styles = StyleSheet.create({
     fontSize: FONT_SIZES.md,
     fontWeight: '500',
   },
-  divider: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginVertical: SPACING.lg,
-  },
-  dividerLine: {
-    flex: 1,
-    height: 1,
-    backgroundColor: COLORS.gray[200],
-  },
-  dividerText: {
-    marginHorizontal: SPACING.md,
-    color: COLORS.gray[400],
-    fontSize: FONT_SIZES.sm,
-  },
   registerContainer: {
     flexDirection: 'row',
     justifyContent: 'center',

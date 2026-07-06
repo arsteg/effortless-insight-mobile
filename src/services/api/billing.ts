@@ -70,10 +70,8 @@ export const billingApi = {
       // Fallback if response isn't wrapped
       return data as unknown as CurrentSubscriptionResponse;
     } catch (error) {
-      // Log for debugging
       if (isApiError(error)) {
         const status = error.response?.status;
-        console.log('[Billing API] getCurrentSubscription error:', status, error.response?.data);
 
         // 404 = no subscription/org, treat as empty
         if (status === 404) {
@@ -87,8 +85,6 @@ export const billingApi = {
         if (status === 401) {
           throw error;
         }
-      } else {
-        console.log('[Billing API] getCurrentSubscription non-API error:', error);
       }
 
       // For any other error, return empty response instead of failing

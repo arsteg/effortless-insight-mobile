@@ -217,6 +217,12 @@ export interface MarkSubmittedRequest {
 }
 
 // Workflow
+export interface WorkflowTransition {
+  key: string;
+  label: string;
+  description?: string;
+}
+
 export interface WorkflowProgressDto {
   noticeId: string;
   workflowInstanceId: string;
@@ -225,6 +231,7 @@ export interface WorkflowProgressDto {
   completedStages: number;
   totalStages: number;
   progressPercent: number;
+  availableTransitions?: WorkflowTransition[];
 }
 
 export interface WorkflowStageInfo {

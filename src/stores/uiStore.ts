@@ -52,7 +52,7 @@ export const useUIStore = create<UIState>((set, get) => ({
   isOnline: true,
   connectionType: null,
   darkModeEnabled: false,
-  colorScheme: Appearance.getColorScheme(),
+  colorScheme: Appearance.getColorScheme() ?? 'light',
   globalLoading: false,
   loadingMessage: null,
   toasts: [],

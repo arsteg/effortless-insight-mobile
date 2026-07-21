@@ -22,6 +22,7 @@ import {
   getAccessToken,
   getRefreshToken,
 } from '../services/storage/secure';
+import { unregisterPushToken } from '../services/pushNotifications';
 
 interface AuthState {
   // State
@@ -246,6 +247,14 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     set({ isLoading: true });
 
     try {
+      // Deactivate this device's push token BEFORE clearing auth, while the
+      // access token is still valid. Otherwise the device stays registered to
+      // this user and the next user on the same device receives their pushes
+      // (audit MO-01 / CC-10).
+      await unregisterPushToken().catch(() => {
+        // Best effort — must not block logout
+      });
+
       // Call logout API (best effort)
       const token = await getAccessToken();
       if (token) {

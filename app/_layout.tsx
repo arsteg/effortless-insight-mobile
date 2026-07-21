@@ -6,7 +6,7 @@
 import { useEffect, useRef } from 'react';
 import { Stack, useRouter, useSegments } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
-import { View, Platform } from 'react-native';
+import { View, Platform, AppState } from 'react-native';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import * as SplashScreen from 'expo-splash-screen';
 import * as Notifications from 'expo-notifications';
@@ -17,6 +17,8 @@ import { COLORS } from '../src/utils/constants';
 import {
   setupNotificationChannels,
   registerPushToken,
+  registerPushTokenWithRetry,
+  addPushTokenRotationListener,
   handleNotificationTap,
   addNotificationResponseReceivedListener,
 } from '../src/services/pushNotifications';
@@ -42,7 +44,7 @@ const queryClient = new QueryClient({
 function RootLayoutNav() {
   const router = useRouter();
   const segments = useSegments();
-  const responseListenerRef = useRef<Notifications.EventSubscription | null>(null);
+  const coldStartHandledRef = useRef(false);
 
   const { isAuthenticated, isInitialized, needsOnboarding, initialize } = useAuthStore();
   const { initializeNetInfo } = useUIStore();
@@ -61,21 +63,51 @@ function RootLayoutNav() {
     // Setup Android notification channels
     setupNotificationChannels();
 
-    // Register push token
-    registerPushToken();
+    // Register push token (with retry/backoff on transient failures — MO-06)
+    registerPushTokenWithRetry();
 
-    // Listen for notification taps
-    const subscription = addNotificationResponseReceivedListener((response) => {
+    // Listen for notification taps while the app is running
+    const responseSub = addNotificationResponseReceivedListener((response) => {
       handleNotificationTap(response.notification);
     });
-    responseListenerRef.current = subscription;
+
+    // Re-register when the OS rotates the token (MO-05)
+    const rotationSub = addPushTokenRotationListener();
+
+    // Re-attempt registration when the app returns to the foreground, covering
+    // an initial registration that failed while offline (idempotent — MO-06)
+    const appStateSub = AppState.addEventListener('change', (state) => {
+      if (state === 'active') {
+        registerPushToken();
+      }
+    });
 
     return () => {
-      if (responseListenerRef.current) {
-        responseListenerRef.current.remove();
-      }
+      responseSub.remove();
+      rotationSub.remove();
+      appStateSub.remove();
     };
   }, [isAuthenticated]);
+
+  // Handle a notification tap that cold-started the app. The response listener
+  // above is only attached after launch, so it never sees the launching tap;
+  // read it explicitly and route once auth is ready (audit MO-04).
+  useEffect(() => {
+    if (!isAuthenticated || !isInitialized || coldStartHandledRef.current) return;
+
+    let cancelled = false;
+    (async () => {
+      const lastResponse = await Notifications.getLastNotificationResponseAsync();
+      if (!cancelled && lastResponse) {
+        coldStartHandledRef.current = true;
+        handleNotificationTap(lastResponse.notification);
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [isAuthenticated, isInitialized]);
 
   // Hide splash screen when initialized
   useEffect(() => {

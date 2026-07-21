@@ -183,39 +183,89 @@ export async function registerPushToken(): Promise<boolean> {
 }
 
 /**
+ * Register with a few retries and backoff. Registration is otherwise
+ * fire-and-forget, so a transient failure (offline at login, a 5xx) meant no
+ * push until the next cold start (audit MO-06). Returns true on success or if
+ * the token was already registered.
+ */
+export async function registerPushTokenWithRetry(maxAttempts = 3): Promise<boolean> {
+  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+    const ok = await registerPushToken();
+    if (ok) return true;
+    if (attempt < maxAttempts) {
+      await new Promise((resolve) => setTimeout(resolve, attempt * 2000));
+    }
+  }
+  console.warn('Push token registration failed after retries');
+  return false;
+}
+
+/**
+ * Re-register whenever the OS rotates the push token (device restore, FCM/APNs
+ * rotation). Without this the app registers only once per session and rotated
+ * tokens silently stop receiving pushes (audit MO-05).
+ */
+export function addPushTokenRotationListener(): Notifications.Subscription {
+  return Notifications.addPushTokenListener(() => {
+    console.log('Push token rotated; re-registering');
+    registerPushTokenWithRetry();
+  });
+}
+
+/**
  * Unregister push token
  */
 export async function unregisterPushToken(): Promise<void> {
+  const token = await getPushToken();
+  if (!token) {
+    return;
+  }
+
   try {
-    const token = await getPushToken();
-    if (token) {
-      await notificationsApi.unregisterPushToken(token);
-      await setPushToken(''); // Clear stored token
-    }
+    await notificationsApi.unregisterPushToken(token);
   } catch (error) {
+    // Server deactivation failed (e.g. offline). The backend will still
+    // reassign or invalidate the token later; what matters here is clearing
+    // the local cache below.
     console.error('Error unregistering push token:', error);
+  } finally {
+    // ALWAYS clear the local cache, even if the server call failed. The
+    // registerPushToken() dedup short-circuits when the cached token matches,
+    // so a stale cache would block the next user on this device from
+    // registering their own token (audit MO-01).
+    await setPushToken('');
   }
 }
 
 /**
  * Handle notification tap - navigate to appropriate screen
  */
+// UUID shape check so a spoofed/garbled id can't be pushed into a route.
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+// Only these path prefixes may be opened from a notification payload, so a
+// server-supplied (or spoofed) actionUrl cannot deep-link anywhere arbitrary
+// (audit MO-10).
+const ALLOWED_ACTION_PREFIXES = ['/notices/', '/tasks', '/documents/', '/notifications', '/dashboard'];
+
 export function handleNotificationTap(notification: Notifications.Notification): void {
   const data = notification.request.content.data as NotificationData;
 
   if (!data) return;
 
-  // Handle different notification types
-  if (data.noticeId) {
-    // Navigate to notice detail
-    router.push(`/notices/${data.noticeId}`);
-  } else if (data.taskId) {
-    // Navigate to tasks tab
+  if (data.noticeId && UUID_RE.test(String(data.noticeId))) {
+    router.push(`/notices/${data.noticeId}` as any);
+    return;
+  }
+
+  if (data.taskId) {
     router.push('/tasks');
-  } else if (data.actionUrl) {
-    // Parse and navigate to action URL
-    const url = data.actionUrl as string;
-    if (url.startsWith('/')) {
+    return;
+  }
+
+  if (data.actionUrl) {
+    const url = String(data.actionUrl);
+    if (url.startsWith('/') && ALLOWED_ACTION_PREFIXES.some((p) => url.startsWith(p))) {
       router.push(url as any);
     }
   }

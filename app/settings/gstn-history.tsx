@@ -10,6 +10,7 @@ import {
   FlatList,
   RefreshControl,
   ActivityIndicator,
+  TouchableOpacity,
 } from 'react-native';
 import { Stack, useLocalSearchParams } from 'expo-router';
 import {
@@ -66,7 +67,7 @@ export default function GstnHistoryScreen() {
     gstin: string;
   }>();
 
-  const { data, isLoading, refetch, isRefetching } = useGstnSyncHistory(params.gstinId || '', 50);
+  const { data, isLoading, isError, refetch, isRefetching } = useGstnSyncHistory(params.gstinId || '', 50);
 
   const renderItem = ({ item }: { item: GstnSyncLogEntry }) => (
     <SyncLogCard log={item} />
@@ -101,6 +102,21 @@ export default function GstnHistoryScreen() {
         <View style={styles.loadingContainer}>
           <ActivityIndicator size="large" color={COLORS.primary} />
           <Text style={styles.loadingText}>Loading history...</Text>
+        </View>
+      ) : isError ? (
+        // A failed fetch must not look like "No Sync History" (audit B9).
+        <View style={styles.emptyContainer}>
+          <XCircle size={48} color={COLORS.error} />
+          <Text style={styles.emptyTitle}>Couldn't load sync history</Text>
+          <Text style={styles.emptyText}>
+            Please check your connection and try again.
+          </Text>
+          <TouchableOpacity
+            onPress={() => refetch()}
+            style={{ marginTop: 16, paddingHorizontal: 24, paddingVertical: 10, backgroundColor: COLORS.primary, borderRadius: 8 }}
+          >
+            <Text style={{ color: COLORS.white, fontWeight: '600' }}>Retry</Text>
+          </TouchableOpacity>
         </View>
       ) : (
         <FlatList

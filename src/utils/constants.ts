@@ -2,10 +2,20 @@
  * App Constants
  */
 
-// API Configuration
+import Constants from "expo-constants";
+
+// API Configuration.
+// Resolution order: build-time env var → app.json `extra.apiUrl` (previously
+// ignored, which meant production could silently fall back to localhost) →
+// the production host as a last resort. There is intentionally NO localhost
+// default any more (audit B12).
+const RESOLVED_API_URL =
+  process.env.EXPO_PUBLIC_API_URL ||
+  (Constants.expoConfig?.extra?.apiUrl as string | undefined) ||
+  "https://api.effortlessinsight.com";
+
 export const API_CONFIG = {
-  // Development URL - change for production
-  BASE_URL: process.env.EXPO_PUBLIC_API_URL || "https://localhost:59110",
+  BASE_URL: RESOLVED_API_URL,
   API_VERSION: "v1",
   TIMEOUT: 30000, // 30 seconds
 } as const;

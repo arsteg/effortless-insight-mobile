@@ -87,12 +87,10 @@ export const billingApi = {
         }
       }
 
-      // For any other error, return empty response instead of failing
-      // This allows the UI to show "No Subscription" state
-      return {
-        subscription: null,
-        usage: null,
-      };
+      // Any other error (5xx, network) is a REAL failure — re-throw it so the UI
+      // shows a distinct error/retry state instead of a false "No Subscription"
+      // that masks the outage (audit B8).
+      throw error;
     }
   },
 

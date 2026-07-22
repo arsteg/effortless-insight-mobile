@@ -20,6 +20,7 @@ import {
   ActivityIndicator,
   ScrollView,
   Platform,
+  Linking,
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { CameraView, Camera, type CameraType, type FlashMode } from 'expo-camera';
@@ -119,30 +120,10 @@ export default function UploadScreen() {
     }).start();
   }, [edgeDetected]);
 
-  // Simulate edge detection (in production, use ML model)
-  useEffect(() => {
-    if (scanState !== 'camera') return;
-
-    const interval = setInterval(() => {
-      // Simulate detection with random confidence
-      const detected = Math.random() > 0.4; // 60% detection rate
-      setEdgeDetected(detected);
-    }, 800);
-
-    return () => clearInterval(interval);
-  }, [scanState]);
-
-  // Auto-capture when edges detected
-  useEffect(() => {
-    if (!edgeDetected || !isMultiPageMode || autoCapturing) return;
-
-    const timeout = setTimeout(() => {
-      setAutoCapturing(true);
-      handleCapture().finally(() => setAutoCapturing(false));
-    }, 1500);
-
-    return () => clearTimeout(timeout);
-  }, [edgeDetected, isMultiPageMode, autoCapturing]);
+  // NOTE: real document edge-detection / auto-capture needs an on-device CV/ML
+  // model, which isn't available here. The previous implementation faked it with
+  // Math.random(), which could auto-capture blank/blurry frames (audit B2). Until
+  // a real detector is integrated, capture is manual via the shutter button.
 
   // Request camera permissions on mount
   useEffect(() => {
@@ -351,10 +332,16 @@ export default function UploadScreen() {
           onProgress: setUploadProgress,
         });
       } else {
-        // Single page upload
+        // Single page: normalize to JPEG so the declared content type is
+        // always accurate, even for a PNG picked from the gallery (audit B-mime).
+        const normalized = await ImageManipulator.manipulateAsync(
+          capturedImage!,
+          [],
+          { compress: 0.9, format: ImageManipulator.SaveFormat.JPEG }
+        );
         await uploadMutation.mutateAsync({
           file: {
-            uri: capturedImage!,
+            uri: normalized.uri,
             type: 'image/jpeg',
             name: `notice_${Date.now()}.jpg`,
           },
@@ -403,7 +390,7 @@ export default function UploadScreen() {
           EffortlessInsight needs camera access to scan notice documents. Please enable camera
           access in your device settings.
         </Text>
-        <Button title="Open Settings" onPress={() => {}} variant="primary" />
+        <Button title="Open Settings" onPress={() => Linking.openSettings()} variant="primary" />
       </View>
     );
   }

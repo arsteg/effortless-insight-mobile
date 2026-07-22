@@ -31,7 +31,8 @@ import {
   useNotificationPreferences,
   useUpdateNotificationPreferences,
 } from '../../src/hooks/useNotifications';
-import { scheduleLocalNotification } from '../../src/services/pushNotifications';
+import { scheduleLocalNotification, registerPushTokenWithRetry } from '../../src/services/pushNotifications';
+import { useUIStore } from '../../src/stores';
 import { COLORS, SPACING, FONT_SIZES, BORDER_RADIUS } from '../../src/utils/constants';
 import type { NotificationChannelPreferences, NotificationType } from '../../src/types/notification';
 
@@ -119,6 +120,7 @@ const NOTIFICATION_TYPES: { type: NotificationType; label: string; icon: React.R
 export default function NotificationSettingsScreen() {
   const { data: preferences, isLoading: isLoadingPreferences } = useNotificationPreferences();
   const updatePreferences = useUpdateNotificationPreferences();
+  const showToast = useUIStore((state) => state.showToast);
 
   const [localChannels, setLocalChannels] = useState<NotificationChannelPreferences | null>(null);
 
@@ -131,12 +133,24 @@ export default function NotificationSettingsScreen() {
   };
 
   const handleChannelChange = useCallback(
-    (channel: keyof NotificationChannelPreferences, value: boolean) => {
+    async (channel: keyof NotificationChannelPreferences, value: boolean) => {
+      // Enabling the push channel must actually secure OS permission and
+      // register the device token — not just flip a stored preference (audit B5).
+      if (channel === 'push' && value) {
+        const registered = await registerPushTokenWithRetry();
+        if (!registered) {
+          showToast(
+            'error',
+            'Enable notifications for this app in your device settings to receive push.'
+          );
+          return; // don't persist push=true if we couldn't register
+        }
+      }
       const newChannels = { ...channels, [channel]: value };
       setLocalChannels(newChannels);
       updatePreferences.mutate({ channels: newChannels });
     },
-    [channels, updatePreferences]
+    [channels, updatePreferences, showToast]
   );
 
   const handleQuietHoursToggle = useCallback(

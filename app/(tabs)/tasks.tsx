@@ -16,6 +16,7 @@ import { useRouter } from 'expo-router';
 import { CheckSquare, Clock, AlertCircle, ChevronRight } from 'lucide-react-native';
 import { useMyTasksInfinite, useUpdateTask } from '../../src/hooks/useTasks';
 import { LoadingSpinner, EmptyState } from '../../src/components/common';
+import { useUIStore } from '../../src/stores';
 import { MyTaskDto, TaskStatus, TaskPriority } from '../../src/types';
 import { COLORS, SPACING, FONT_SIZES, BORDER_RADIUS, PRIORITY_COLORS } from '../../src/utils/constants';
 
@@ -28,6 +29,7 @@ const FILTER_OPTIONS = [
 
 export default function TasksScreen() {
   const router = useRouter();
+  const showToast = useUIStore((state) => state.showToast);
   const [selectedFilter, setSelectedFilter] = useState<string>('all');
 
   const queryParams = useMemo(() => {
@@ -70,7 +72,14 @@ export default function TasksScreen() {
         data: { status: newStatus },
       });
     } catch (error) {
-      console.error('Failed to update task:', error);
+      // Distinguish an offline-queued update from a real failure and tell the
+      // user, instead of silently swallowing it (audit B3).
+      const message = error instanceof Error ? error.message : '';
+      if (message.toLowerCase().includes('offline')) {
+        showToast('info', 'Saved offline — this task will update when you reconnect.');
+      } else {
+        showToast('error', 'Failed to update task. Please try again.');
+      }
     }
   };
 

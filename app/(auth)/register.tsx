@@ -11,6 +11,7 @@ import {
   TouchableOpacity,
   KeyboardAvoidingView,
   Platform,
+  Linking,
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useForm, Controller } from 'react-hook-form';
@@ -34,7 +35,10 @@ const registerSchema = z
       .min(8, 'Password must be at least 8 characters')
       .regex(/[A-Z]/, 'Password must contain at least one uppercase letter')
       .regex(/[a-z]/, 'Password must contain at least one lowercase letter')
-      .regex(/[0-9]/, 'Password must contain at least one number'),
+      .regex(/[0-9]/, 'Password must contain at least one number')
+      // Match the change/reset-password policy so a registered password is
+      // always valid to re-use later (audit B13).
+      .regex(/[!@#$%^&*(),.?":{}|<>]/, 'Password must contain at least one special character'),
     confirmPassword: z.string(),
     acceptTerms: z.boolean(),
   })
@@ -289,9 +293,19 @@ export default function RegisterScreen() {
                   </View>
                   <Text style={styles.termsText}>
                     I agree to the{' '}
-                    <Text style={styles.termsLink}>Terms of Service</Text>
+                    <Text
+                      style={styles.termsLink}
+                      onPress={() => Linking.openURL('https://effortlessinsight.com/terms')}
+                    >
+                      Terms of Service
+                    </Text>
                     {' '}and{' '}
-                    <Text style={styles.termsLink}>Privacy Policy</Text>
+                    <Text
+                      style={styles.termsLink}
+                      onPress={() => Linking.openURL('https://effortlessinsight.com/privacy')}
+                    >
+                      Privacy Policy
+                    </Text>
                   </Text>
                 </TouchableOpacity>
                 {errors.acceptTerms && (

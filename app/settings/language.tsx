@@ -48,8 +48,8 @@ export default function LanguageScreen() {
           <Text style={styles.headerTitle}>{t('settings.selectLanguage')}</Text>
           <Text style={styles.headerSubtitle}>
             {locale === 'hi'
-              ? 'Choose your preferred language for the app'
-              : 'ऐप के लिए अपनी पसंदीदा भाषा चुनें'}
+              ? 'ऐप के लिए अपनी पसंदीदा भाषा चुनें'
+              : 'Choose your preferred language for the app'}
           </Text>
         </View>
 
@@ -90,8 +90,8 @@ export default function LanguageScreen() {
         <View style={styles.info}>
           <Text style={styles.infoText}>
             {locale === 'hi'
-              ? 'Changing the language will update all text throughout the app. AI analysis summaries will be shown in your selected language when available.'
-              : 'भाषा बदलने से पूरे ऐप में सभी टेक्स्ट अपडेट हो जाएगा। उपलब्ध होने पर AI विश्लेषण सारांश आपकी चुनी हुई भाषा में दिखाई देगा।'}
+              ? 'भाषा बदलने से पूरे ऐप में सभी टेक्स्ट अपडेट हो जाएगा। उपलब्ध होने पर AI विश्लेषण सारांश आपकी चुनी हुई भाषा में दिखाई देगा।'
+              : 'Changing the language will update all text throughout the app. AI analysis summaries will be shown in your selected language when available.'}
           </Text>
         </View>
       </View>

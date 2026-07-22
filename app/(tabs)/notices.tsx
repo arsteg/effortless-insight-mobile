@@ -3,7 +3,7 @@
  * Shows all notices with filtering and search
  */
 
-import React, { useState, useCallback, useMemo } from 'react';
+import React, { useState, useCallback, useMemo, useEffect } from 'react';
 import {
   View,
   Text,
@@ -34,10 +34,18 @@ export default function NoticesScreen() {
   const params = useLocalSearchParams<{ filter?: string; status?: string }>();
 
   const [search, setSearch] = useState('');
+  const [debouncedSearch, setDebouncedSearch] = useState('');
   const [selectedStatus, setSelectedStatus] = useState<NoticeStatus | 'all'>(
     (params.status as NoticeStatus) || 'all'
   );
   const [showFilters, setShowFilters] = useState(false);
+
+  // Debounce the search text so we don't fire a query on every keystroke
+  // (audit B-search).
+  useEffect(() => {
+    const handle = setTimeout(() => setDebouncedSearch(search), 400);
+    return () => clearTimeout(handle);
+  }, [search]);
 
   // Build query params
   const queryParams = useMemo(() => {
@@ -46,8 +54,8 @@ export default function NoticesScreen() {
     if (selectedStatus !== 'all') {
       p.status = selectedStatus;
     }
-    if (search) {
-      p.search = search;
+    if (debouncedSearch) {
+      p.search = debouncedSearch;
     }
 
     // Handle special filters
@@ -60,7 +68,7 @@ export default function NoticesScreen() {
     }
 
     return p;
-  }, [selectedStatus, search, params.filter]);
+  }, [selectedStatus, debouncedSearch, params.filter]);
 
   const {
     data,

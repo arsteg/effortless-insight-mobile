@@ -12,7 +12,7 @@ import * as SplashScreen from 'expo-splash-screen';
 import * as Notifications from 'expo-notifications';
 import * as Linking from 'expo-linking';
 import { useAuthStore, useUIStore } from '../src/stores';
-import { ErrorBoundary, LoadingSpinner, OfflineBanner } from '../src/components/common';
+import { ErrorBoundary, LoadingSpinner, OfflineBanner, ToastContainer } from '../src/components/common';
 import { COLORS } from '../src/utils/constants';
 import {
   setupNotificationChannels,
@@ -233,6 +233,7 @@ function RootLayoutNav() {
           }}
         />
       </Stack>
+      <ToastContainer />
     </>
   );
 }

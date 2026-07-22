@@ -62,9 +62,11 @@ export async function addToQueue(
 ): Promise<string> {
   const queue = await getQueue();
 
-  // Check queue size limit
-  if (queue.length >= OFFLINE_CONFIG.MAX_QUEUE_SIZE) {
-    throw new Error('Offline queue is full. Please sync when online.');
+  // At capacity, drop the OLDEST queued action to make room rather than losing
+  // the action the user just took (audit B3).
+  while (queue.length >= OFFLINE_CONFIG.MAX_QUEUE_SIZE) {
+    const dropped = queue.shift();
+    console.warn('Offline queue full; dropped oldest queued action', dropped?.id);
   }
 
   const action: QueuedAction = {
@@ -170,6 +172,22 @@ export async function processQueue(): Promise<{
   let failed = 0;
 
   for (const action of queue) {
+    // Terminally failed: don't keep re-attempting every sync. It stays in the
+    // queue for a MANUAL retry / clear only (audit B3).
+    if (action.retries >= OFFLINE_CONFIG.MAX_RETRIES) {
+      failed++;
+      continue;
+    }
+
+    // Exponential backoff: don't re-attempt too soon after the last failure
+    // (RETRY_DELAY_MS was previously defined but never used).
+    if (action.retries > 0 && action.lastAttempt) {
+      const backoffMs = OFFLINE_CONFIG.RETRY_DELAY_MS * Math.pow(2, action.retries - 1);
+      if (Date.now() - action.lastAttempt < backoffMs) {
+        continue; // still cooling down; try again on a later sync
+      }
+    }
+
     try {
       await processAction(action);
       await removeFromQueue(action.id);
@@ -178,13 +196,9 @@ export async function processQueue(): Promise<{
       action.retries++;
       action.lastAttempt = Date.now();
       action.error = error instanceof Error ? error.message : 'Unknown error';
-
+      await updateAction(action);
       if (action.retries >= OFFLINE_CONFIG.MAX_RETRIES) {
-        // Move to failed state but keep in queue for manual retry
-        await updateAction(action);
         failed++;
-      } else {
-        await updateAction(action);
       }
     }
   }

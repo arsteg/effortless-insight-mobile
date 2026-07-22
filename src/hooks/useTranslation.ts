@@ -3,8 +3,8 @@
  * React hook for using translations
  */
 
-import { useState, useEffect, useCallback } from 'react';
-import { i18n, initializeLocale, setLocale, getLocale, t } from '../i18n';
+import { useEffect, useCallback, useSyncExternalStore } from 'react';
+import { initializeLocale, setLocale, getLocale, subscribeLocale, t } from '../i18n';
 
 export interface UseTranslationResult {
   t: (key: string, options?: object) => string;
@@ -15,23 +15,16 @@ export interface UseTranslationResult {
 }
 
 export function useTranslation(): UseTranslationResult {
-  const [locale, setLocaleState] = useState(getLocale());
-  const [isInitialized, setIsInitialized] = useState(false);
+  // Shared external store: any locale change re-renders ALL consumers (B9).
+  const locale = useSyncExternalStore(subscribeLocale, getLocale, getLocale);
 
-  // Initialize locale on mount
+  // Initialize once (guarded inside initializeLocale).
   useEffect(() => {
-    const init = async () => {
-      const initialLocale = await initializeLocale();
-      setLocaleState(initialLocale);
-      setIsInitialized(true);
-    };
-    init();
+    initializeLocale();
   }, []);
 
-  // Change locale handler
   const handleSetLocale = useCallback(async (newLocale: 'en' | 'hi') => {
     await setLocale(newLocale);
-    setLocaleState(newLocale);
   }, []);
 
   return {

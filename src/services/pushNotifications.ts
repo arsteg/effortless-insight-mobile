@@ -248,9 +248,13 @@ const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/
 // (audit MO-10).
 const ALLOWED_ACTION_PREFIXES = ['/notices/', '/tasks', '/documents/', '/notifications', '/dashboard'];
 
-export function handleNotificationTap(notification: Notifications.Notification): void {
-  const data = notification.request.content.data as NotificationData;
-
+/**
+ * Route from a notification's data with the same validation everywhere — a
+ * UUID-checked noticeId and an allow-listed actionUrl — so both a push tap and
+ * the in-app list tap are safe from spoofed/arbitrary deep links (audit MO-10 /
+ * B-list-tap). Shared by handleNotificationTap and the notifications screen.
+ */
+export function navigateForNotificationData(data: NotificationData | null | undefined): void {
   if (!data) return;
 
   if (data.noticeId && UUID_RE.test(String(data.noticeId))) {
@@ -269,6 +273,10 @@ export function handleNotificationTap(notification: Notifications.Notification):
       router.push(url as any);
     }
   }
+}
+
+export function handleNotificationTap(notification: Notifications.Notification): void {
+  navigateForNotificationData(notification.request.content.data as NotificationData);
 }
 
 /**

@@ -42,6 +42,7 @@ interface AuthState {
 
   // Actions
   initialize: () => Promise<void>;
+  restoreSession: (cachedUser: UserDto) => Promise<void>;
   login: (email: string, password: string, rememberMe?: boolean) => Promise<void>;
   complete2fa: (code: string) => Promise<void>;
   logout: () => Promise<void>;
@@ -50,7 +51,34 @@ interface AuthState {
   enableBiometric: () => Promise<boolean>;
   disableBiometric: () => Promise<void>;
   authenticateWithBiometric: () => Promise<boolean>;
+  /**
+   * Prompt biometric and, on success, restore the authenticated session from
+   * the tokens/user already in secure storage. Returns false if biometric
+   * fails or there is no stored session to restore (audit B4).
+   */
+  unlockWithBiometric: () => Promise<boolean>;
   completeOnboarding: (data: CreateOrganizationRequest) => Promise<void>;
+}
+
+// Maps the profile API response to the app's UserDto (shared by initialize and
+// biometric unlock so the session-restore logic lives in one place).
+function mapProfileToUser(profile: Awaited<ReturnType<typeof authApi.getProfile>>): UserDto {
+  return {
+    id: profile.id,
+    email: profile.email,
+    name: profile.name,
+    mobile: profile.mobile,
+    avatarUrl: profile.avatarUrl,
+    role: profile.role,
+    organization: profile.organization
+      ? { id: profile.organization.id, name: profile.organization.name, role: profile.role }
+      : undefined,
+    organizations: profile.organizations.map((org) => ({
+      id: org.organizationId,
+      name: org.organizationName,
+      role: org.role,
+    })),
+  };
 }
 
 export const useAuthStore = create<AuthState>((set, get) => ({
@@ -72,64 +100,29 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     try {
       set({ isLoading: true });
 
-      // Check if we have valid tokens
-      const hasTokens = await hasValidTokens();
-
-      if (hasTokens) {
-        // Get cached user
-        const cachedUser = await getUser();
-
-        if (cachedUser) {
-          set({
-            isAuthenticated: true,
-            user: cachedUser,
-            needsOnboarding: !cachedUser.organization?.id,
-          });
-
-          // Refresh profile in background
-          try {
-            const profile = await authApi.getProfile();
-            const user: UserDto = {
-              id: profile.id,
-              email: profile.email,
-              name: profile.name,
-              mobile: profile.mobile,
-              avatarUrl: profile.avatarUrl,
-              role: profile.role,
-              organization: profile.organization ? {
-                id: profile.organization.id,
-                name: profile.organization.name,
-                role: profile.role,
-              } : undefined,
-              organizations: profile.organizations.map(org => ({
-                id: org.organizationId,
-                name: org.organizationName,
-                role: org.role,
-              })),
-            };
-            await setUser(user);
-            set({
-              user,
-              needsOnboarding: !user.organization?.id,
-            });
-          } catch {
-            // If profile fetch fails, tokens may be invalid
-            await clearTokens();
-            await clearUser();
-            set({ isAuthenticated: false, user: null, needsOnboarding: false });
-          }
-        }
-      }
-
-      // Check biometric
       const biometricEnabled = await getBiometricEnabled();
       await get().checkBiometricAvailability();
+      set({ biometricEnabled });
 
-      set({
-        isLoading: false,
-        isInitialized: true,
-        biometricEnabled,
-      });
+      const hasTokens = await hasValidTokens();
+      const cachedUser = hasTokens ? await getUser() : null;
+
+      if (hasTokens && cachedUser) {
+        // If biometric is enabled, REQUIRE it before restoring the session —
+        // otherwise it was never actually enforced (audit B4). On failure we
+        // keep the tokens but stay unauthenticated; the login screen offers an
+        // "Unlock" retry and a password fallback.
+        if (biometricEnabled && get().biometricAvailable) {
+          const unlocked = await get().authenticateWithBiometric();
+          if (!unlocked) {
+            set({ isLoading: false, isInitialized: true, isAuthenticated: false });
+            return;
+          }
+        }
+        await get().restoreSession(cachedUser);
+      }
+
+      set({ isLoading: false, isInitialized: true });
     } catch (error) {
       console.error('Auth initialization error:', error);
       set({
@@ -139,6 +132,39 @@ export const useAuthStore = create<AuthState>((set, get) => ({
         user: null,
       });
     }
+  },
+
+  /**
+   * Restore the authenticated session from a cached user, then refresh the
+   * profile in the background. Shared by initialize() and biometric unlock.
+   */
+  restoreSession: async (cachedUser: UserDto) => {
+    set({
+      isAuthenticated: true,
+      user: cachedUser,
+      needsOnboarding: !cachedUser.organization?.id,
+    });
+    try {
+      const profile = await authApi.getProfile();
+      const user = mapProfileToUser(profile);
+      await setUser(user);
+      set({ user, needsOnboarding: !user.organization?.id });
+    } catch {
+      // Tokens likely invalid — clear and de-authenticate.
+      await clearTokens();
+      await clearUser();
+      set({ isAuthenticated: false, user: null, needsOnboarding: false });
+    }
+  },
+
+  unlockWithBiometric: async () => {
+    const ok = await get().authenticateWithBiometric();
+    if (!ok) return false;
+    const hasTokens = await hasValidTokens();
+    const cachedUser = hasTokens ? await getUser() : null;
+    if (!hasTokens || !cachedUser) return false;
+    await get().restoreSession(cachedUser);
+    return true;
   },
 
   /**

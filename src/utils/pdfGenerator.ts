@@ -1,12 +1,15 @@
 /**
  * PDF Generator Utility
  *
- * Generates PDF documents from scanned images.
- * Uses base64 encoding to create a multi-page PDF.
+ * Generates real, valid multi-page PDF documents from scanned images using
+ * pdf-lib (pure JS — no native module). Previously this wrote a JSON manifest of
+ * local file:// URIs and mislabeled it as a PDF, which the server could not
+ * process (audit B1).
  */
 
 import * as FileSystem from 'expo-file-system/legacy';
 import * as ImageManipulator from 'expo-image-manipulator';
+import { PDFDocument } from 'pdf-lib';
 
 interface ScannedPage {
   id: string;
@@ -152,44 +155,43 @@ export async function generatePdfFromPages(
   const filename = options?.filename || `document_${Date.now()}.pdf`;
 
   try {
-    // For now, we'll create a zip-like archive of images
-    // In production, use a proper PDF library
+    const pdfDoc = await PDFDocument.create();
 
-    // Process all images to base64
-    const processedImages: string[] = [];
     for (const page of pages) {
-      const base64 = await processImageForPdf(page.uri);
-      processedImages.push(base64);
+      // Resize + compress each scan to a JPEG (base64), then embed it.
+      const processed = await ImageManipulator.manipulateAsync(
+        page.uri,
+        [{ resize: { width: 1700 } }], // ~200 DPI for A4
+        {
+          compress: options?.quality ?? 0.85,
+          format: ImageManipulator.SaveFormat.JPEG,
+          base64: true,
+        }
+      );
+      if (!processed.base64) continue;
+
+      const image = await pdfDoc.embedJpg(processed.base64);
+      // One page per image, sized to the image so the scan fills it 1:1.
+      const pdfPage = pdfDoc.addPage([image.width, image.height]);
+      pdfPage.drawImage(image, { x: 0, y: 0, width: image.width, height: image.height });
     }
 
-    // Create PDF content (simplified)
-    // A4 dimensions at 72 DPI: 595 x 842 points
-    const pageWidth = 595;
-    const pageHeight = 842;
+    if (pdfDoc.getPageCount() === 0) {
+      return { success: false, error: 'No pages could be processed' };
+    }
 
-    // For this implementation, we'll save as a batch of images
-    // with metadata for server-side PDF generation
-    const manifestPath = `${FileSystem.documentDirectory}${filename.replace('.pdf', '.json')}`;
-    const manifest = {
-      type: 'multi-page-document',
-      pageCount: pages.length,
-      pages: pages.map((page, index) => ({
-        index,
-        uri: page.uri,
-        timestamp: page.timestamp,
-      })),
-      createdAt: Date.now(),
-    };
+    const pdfBase64 = await pdfDoc.saveAsBase64();
+    const pdfPath = `${FileSystem.documentDirectory}${filename}`;
+    await FileSystem.writeAsStringAsync(pdfPath, pdfBase64, {
+      encoding: FileSystem.EncodingType.Base64,
+    });
 
-    await FileSystem.writeAsStringAsync(manifestPath, JSON.stringify(manifest));
-
-    // Get file size
-    const fileInfo = await FileSystem.getInfoAsync(manifestPath);
+    const fileInfo = await FileSystem.getInfoAsync(pdfPath);
 
     return {
       success: true,
-      pdfUri: manifestPath,
-      pageCount: pages.length,
+      pdfUri: pdfPath,
+      pageCount: pdfDoc.getPageCount(),
       fileSizeBytes: fileInfo.exists ? fileInfo.size : 0,
     };
   } catch (error) {

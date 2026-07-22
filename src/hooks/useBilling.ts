@@ -378,17 +378,35 @@ export function usePaywall(action: PaywallAction): {
   paywall: PaywallState | null;
   refetch: () => void;
 } {
-  const { data, isLoading, refetch } = useUsageCheck(action);
+  const { data, isLoading, isError, refetch } = useUsageCheck(action);
 
-  if (isLoading || !data) {
+  if (isLoading) {
     return {
-      isLoading,
+      isLoading: true,
       paywall: null,
       refetch,
     };
   }
 
-  if (data.allowed) {
+  // Fail CLOSED: if the limit check errored we can't confirm the action is
+  // allowed, so block it (with a retry) rather than letting it through and
+  // leaking paid usage on an outage (audit B8).
+  if (isError) {
+    return {
+      isLoading: false,
+      paywall: {
+        isBlocked: true,
+        action,
+        currentUsage: 0,
+        limit: null,
+        suggestedPlan: null,
+        message: "We couldn't verify your plan limits. Please check your connection and try again.",
+      },
+      refetch,
+    };
+  }
+
+  if (!data || data.allowed) {
     return {
       isLoading: false,
       paywall: null,

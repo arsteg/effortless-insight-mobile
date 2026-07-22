@@ -42,7 +42,7 @@ export default function LoginScreen() {
     requires2fa,
     biometricEnabled,
     biometricAvailable,
-    authenticateWithBiometric,
+    unlockWithBiometric,
   } = useAuthStore();
 
   const {
@@ -73,9 +73,11 @@ export default function LoginScreen() {
   }, [requires2fa]);
 
   const handleBiometricAuth = async () => {
-    const success = await authenticateWithBiometric();
+    // Unlock actually restores the session from stored tokens (audit B4).
+    // If there is no stored session (e.g. after a real logout), biometric can't
+    // help — the user signs in with a password instead.
+    const success = await unlockWithBiometric();
     if (success) {
-      // Biometric auth successful, tokens already stored
       router.replace('/(tabs)');
     }
   };

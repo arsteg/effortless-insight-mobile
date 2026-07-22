@@ -25,6 +25,8 @@ export default function TwoFactorScreen() {
   const router = useRouter();
   const [code, setCode] = useState<string[]>(new Array(CODE_LENGTH).fill(''));
   const [error, setError] = useState<string | null>(null);
+  const [useBackupCode, setUseBackupCode] = useState(false);
+  const [backupCode, setBackupCode] = useState('');
   const { complete2fa, isLoading, requires2fa } = useAuthStore();
 
   const inputRefs = useRef<(TextInput | null)[]>([]);
@@ -87,6 +89,29 @@ export default function TwoFactorScreen() {
     }
   };
 
+  const handleBackupVerify = async () => {
+    const trimmed = backupCode.trim();
+    if (!trimmed) {
+      setError('Please enter a backup code');
+      return;
+    }
+    try {
+      setError(null);
+      await complete2fa(trimmed);
+      router.replace('/(tabs)');
+    } catch (err) {
+      setError(getApiErrorMessage(err));
+      setBackupCode('');
+    }
+  };
+
+  const toggleBackupMode = () => {
+    setError(null);
+    setBackupCode('');
+    setCode(new Array(CODE_LENGTH).fill(''));
+    setUseBackupCode((prev) => !prev);
+  };
+
   return (
     <KeyboardAvoidingView
       style={styles.container}
@@ -107,7 +132,9 @@ export default function TwoFactorScreen() {
         <View style={styles.header}>
           <Text style={styles.title}>Two-Factor Authentication</Text>
           <Text style={styles.subtitle}>
-            Enter the 6-digit code from your authenticator app to complete sign in.
+            {useBackupCode
+              ? 'Enter one of your backup codes to complete sign in.'
+              : 'Enter the 6-digit code from your authenticator app to complete sign in.'}
           </Text>
         </View>
 
@@ -118,45 +145,75 @@ export default function TwoFactorScreen() {
           </View>
         )}
 
-        {/* Code Input */}
-        <View style={styles.codeContainer}>
-          {code.map((digit, index) => (
+        {useBackupCode ? (
+          <>
+            {/* Backup Code Input */}
             <TextInput
-              key={index}
-              ref={(ref) => {
-                inputRefs.current[index] = ref;
+              style={[styles.backupInput, error ? styles.codeInputError : undefined]}
+              value={backupCode}
+              onChangeText={(text) => {
+                setBackupCode(text);
+                setError(null);
               }}
-              style={[
-                styles.codeInput,
-                digit ? styles.codeInputFilled : undefined,
-                error ? styles.codeInputError : undefined,
-              ]}
-              value={digit}
-              onChangeText={(text) => handleCodeChange(text, index)}
-              onKeyPress={({ nativeEvent }) => handleKeyPress(nativeEvent.key, index)}
-              keyboardType="number-pad"
-              maxLength={1}
-              selectTextOnFocus
-              autoFocus={index === 0}
+              placeholder="Enter backup code"
+              autoCapitalize="characters"
+              autoCorrect={false}
+              autoFocus
             />
-          ))}
-        </View>
 
-        {/* Verify Button */}
-        <Button
-          title="Verify"
-          onPress={handleVerify}
-          loading={isLoading}
-          fullWidth
-          size="lg"
-          disabled={code.some((d) => !d)}
-        />
+            <Button
+              title="Verify"
+              onPress={handleBackupVerify}
+              loading={isLoading}
+              fullWidth
+              size="lg"
+              disabled={!backupCode.trim()}
+            />
+          </>
+        ) : (
+          <>
+            {/* Code Input */}
+            <View style={styles.codeContainer}>
+              {code.map((digit, index) => (
+                <TextInput
+                  key={index}
+                  ref={(ref) => {
+                    inputRefs.current[index] = ref;
+                  }}
+                  style={[
+                    styles.codeInput,
+                    digit ? styles.codeInputFilled : undefined,
+                    error ? styles.codeInputError : undefined,
+                  ]}
+                  value={digit}
+                  onChangeText={(text) => handleCodeChange(text, index)}
+                  onKeyPress={({ nativeEvent }) => handleKeyPress(nativeEvent.key, index)}
+                  keyboardType="number-pad"
+                  maxLength={1}
+                  selectTextOnFocus
+                  autoFocus={index === 0}
+                />
+              ))}
+            </View>
+
+            <Button
+              title="Verify"
+              onPress={handleVerify}
+              loading={isLoading}
+              fullWidth
+              size="lg"
+              disabled={code.some((d) => !d)}
+            />
+          </>
+        )}
 
         {/* Help Text */}
         <View style={styles.helpContainer}>
           <Text style={styles.helpText}>
-            Can't access your authenticator?{' '}
-            <Text style={styles.helpLink}>Use a backup code</Text>
+            {useBackupCode ? 'Have your authenticator? ' : "Can't access your authenticator? "}
+            <Text style={styles.helpLink} onPress={toggleBackupMode}>
+              {useBackupCode ? 'Use authenticator code' : 'Use a backup code'}
+            </Text>
           </Text>
         </View>
       </View>
@@ -244,6 +301,18 @@ const styles = StyleSheet.create({
   },
   codeInputError: {
     borderColor: COLORS.error,
+  },
+  backupInput: {
+    width: '100%',
+    height: 56,
+    borderWidth: 2,
+    borderColor: COLORS.gray[300],
+    borderRadius: BORDER_RADIUS.md,
+    fontSize: FONT_SIZES.lg,
+    textAlign: 'center',
+    color: COLORS.gray[900],
+    marginBottom: SPACING.lg,
+    paddingHorizontal: SPACING.md,
   },
   helpContainer: {
     marginTop: SPACING.xl,

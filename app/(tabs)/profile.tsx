@@ -2,7 +2,7 @@
  * Profile/Settings Screen
  */
 
-import React, { useState } from 'react';
+import React from 'react';
 import {
   View,
   Text,
@@ -32,7 +32,7 @@ import {
 } from 'lucide-react-native';
 import * as WebBrowser from 'expo-web-browser';
 import * as Linking from 'expo-linking';
-import { useAuthStore, useOfflineStore, useUIStore } from '../../src/stores';
+import { useAuthStore, useOfflineStore } from '../../src/stores';
 import { useTranslation } from '../../src/hooks';
 import { Button, LoadingSpinner } from '../../src/components/common';
 import { COLORS, SPACING, FONT_SIZES, BORDER_RADIUS } from '../../src/utils/constants';
@@ -52,10 +52,7 @@ export default function ProfileScreen() {
 
   const { queueTotal, clearAllCache, clearAllQueue, loadCacheStatus, loadQueueStatus } =
     useOfflineStore();
-  const { darkModeEnabled, setDarkModeEnabled, initializeTheme } = useUIStore();
   const { t, locale, isHindi } = useTranslation();
-
-  const [notificationsEnabled, setNotificationsEnabled] = useState(true);
 
   const handleLanguage = () => {
     router.push('/settings/language');
@@ -64,7 +61,6 @@ export default function ProfileScreen() {
   React.useEffect(() => {
     loadCacheStatus();
     loadQueueStatus();
-    initializeTheme();
   }, []);
 
   const handleLogout = () => {
@@ -234,7 +230,7 @@ export default function ProfileScreen() {
 
       {/* Preferences Section */}
       <View style={styles.section}>
-        <Text style={styles.sectionTitle}>{t('profile.title') === 'Profile' ? 'Preferences' : 'प्राथमिकताएं'}</Text>
+        <Text style={styles.sectionTitle}>{isHindi ? 'प्राथमिकताएं' : 'Preferences'}</Text>
 
         <SettingItem
           icon={<Languages size={20} color={COLORS.gray[500]} />}
@@ -243,11 +239,12 @@ export default function ProfileScreen() {
           onPress={handleLanguage}
         />
 
-        <SettingToggle
+        {/* Route to the real notification preferences instead of a decorative,
+            do-nothing local toggle (audit B6). */}
+        <SettingItem
           icon={<Bell size={20} color={COLORS.gray[500]} />}
-          label={isHindi ? 'पुश सूचनाएं' : 'Push Notifications'}
-          value={notificationsEnabled}
-          onToggle={setNotificationsEnabled}
+          label={isHindi ? 'सूचना सेटिंग्स' : 'Notification Settings'}
+          onPress={() => router.push('/settings/notifications')}
         />
 
         {biometricAvailable && (
@@ -258,13 +255,6 @@ export default function ProfileScreen() {
             onToggle={handleBiometricToggle}
           />
         )}
-
-        <SettingToggle
-          icon={<Moon size={20} color={COLORS.gray[500]} />}
-          label="Dark Mode"
-          value={darkModeEnabled}
-          onToggle={setDarkModeEnabled}
-        />
       </View>
 
       {/* Storage Section */}

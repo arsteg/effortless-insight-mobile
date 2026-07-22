@@ -21,35 +21,49 @@ const i18n = new I18n({
 i18n.defaultLocale = 'en';
 i18n.enableFallback = true;
 
-// Initialize locale from saved preference or system locale
+// External-store subscription so EVERY useTranslation consumer re-renders when
+// the locale changes — previously each hook held its own state and only the
+// screen that triggered the change updated (audit B9).
+type LocaleListener = () => void;
+const localeListeners = new Set<LocaleListener>();
+let initialized = false;
+
+export function subscribeLocale(listener: LocaleListener): () => void {
+  localeListeners.add(listener);
+  return () => localeListeners.delete(listener);
+}
+
+function notifyLocaleChanged(): void {
+  localeListeners.forEach((listener) => listener());
+}
+
+// Initialize locale from saved preference or system locale (runs once).
 export async function initializeLocale(): Promise<string> {
+  if (initialized) {
+    return i18n.locale;
+  }
+  initialized = true;
   try {
-    // Check saved preference first
     const savedLocale = await AsyncStorage.getItem(LANGUAGE_KEY);
     if (savedLocale && (savedLocale === 'en' || savedLocale === 'hi')) {
       i18n.locale = savedLocale;
-      return savedLocale;
+    } else {
+      const locales = getLocales();
+      const systemLocale = locales[0]?.languageCode || 'en';
+      i18n.locale = systemLocale === 'hi' ? 'hi' : 'en';
     }
-
-    // Fall back to system locale
-    const locales = getLocales();
-    const systemLocale = locales[0]?.languageCode || 'en';
-
-    // Only support en and hi
-    const locale = systemLocale === 'hi' ? 'hi' : 'en';
-    i18n.locale = locale;
-
-    return locale;
   } catch (error) {
     console.error('Failed to initialize locale:', error);
     i18n.locale = 'en';
-    return 'en';
   }
+  notifyLocaleChanged();
+  return i18n.locale;
 }
 
-// Change locale and save preference
+// Change locale and save preference, notifying all subscribers.
 export async function setLocale(locale: 'en' | 'hi'): Promise<void> {
   i18n.locale = locale;
+  notifyLocaleChanged();
   await AsyncStorage.setItem(LANGUAGE_KEY, locale);
 }
 

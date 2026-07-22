@@ -37,6 +37,7 @@ import {
   useMarkAllAsRead,
   useDeleteNotification,
 } from '../../src/hooks/useNotifications';
+import { navigateForNotificationData } from '../../src/services/pushNotifications';
 import { COLORS, SPACING, FONT_SIZES, BORDER_RADIUS } from '../../src/utils/constants';
 import type { NotificationDto, NotificationType } from '../../src/types/notification';
 
@@ -173,6 +174,7 @@ export default function NotificationsScreen() {
   const {
     data,
     isLoading,
+    isError,
     fetchNextPage,
     hasNextPage,
     isFetchingNextPage,
@@ -208,14 +210,13 @@ export default function NotificationsScreen() {
       markAsRead.mutate(notification.id);
     }
 
-    // Navigate based on notification data
-    if (notification.data?.noticeId) {
-      router.push(`/notices/${notification.data.noticeId}`);
-    } else if (notification.data?.taskId) {
-      router.push('/tasks');
-    } else if (notification.actionUrl) {
-      router.push(notification.actionUrl as any);
-    }
+    // Route through the SAME validated helper the push handler uses, so a
+    // spoofed noticeId/actionUrl can't deep-link anywhere arbitrary (audit
+    // B-list-tap). actionUrl lives at the top level of the DTO; merge it in.
+    navigateForNotificationData({
+      ...(notification.data as any),
+      actionUrl: notification.actionUrl,
+    });
   }, [markAsRead]);
 
   const handleMarkAsRead = useCallback((id: string) => {
@@ -265,6 +266,34 @@ export default function NotificationsScreen() {
           }}
         />
         <NotificationSkeleton />
+      </View>
+    );
+  }
+
+  // A failed fetch must not look like "no notifications" — show a retryable
+  // error state (audit B10).
+  if (isError && notifications.length === 0) {
+    return (
+      <View style={styles.container}>
+        <Stack.Screen
+          options={{
+            title: 'Notifications',
+            headerRight: () => (
+              <TouchableOpacity onPress={() => router.push('/settings/notifications')}>
+                <Settings color={COLORS.white} size={24} />
+              </TouchableOpacity>
+            ),
+          }}
+        />
+        <View style={styles.errorContainer}>
+          <Text style={styles.errorTitle}>Couldn't load notifications</Text>
+          <Text style={styles.errorMessage}>
+            Something went wrong. Please check your connection and try again.
+          </Text>
+          <TouchableOpacity style={styles.errorRetry} onPress={() => refetch()}>
+            <Text style={styles.errorRetryText}>Retry</Text>
+          </TouchableOpacity>
+        </View>
       </View>
     );
   }
@@ -346,6 +375,36 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: COLORS.gray[50],
+  },
+  errorContainer: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: SPACING.xl,
+  },
+  errorTitle: {
+    fontSize: FONT_SIZES.lg,
+    fontWeight: '600',
+    color: COLORS.gray[900],
+    marginBottom: SPACING.sm,
+    textAlign: 'center',
+  },
+  errorMessage: {
+    fontSize: FONT_SIZES.sm,
+    color: COLORS.gray[500],
+    textAlign: 'center',
+    marginBottom: SPACING.lg,
+  },
+  errorRetry: {
+    backgroundColor: COLORS.primary,
+    paddingHorizontal: SPACING.xl,
+    paddingVertical: SPACING.md,
+    borderRadius: BORDER_RADIUS.md,
+  },
+  errorRetryText: {
+    color: COLORS.white,
+    fontWeight: '600',
+    fontSize: FONT_SIZES.md,
   },
   tabBar: {
     flexDirection: 'row',

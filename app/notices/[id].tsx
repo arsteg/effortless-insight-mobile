@@ -60,7 +60,7 @@ export default function NoticeDetailScreen() {
   // Ensure id is defined
   const noticeId = id ?? '';
 
-  const { data: notice, isLoading, refetch: refetchNotice } = useNotice(noticeId);
+  const { data: notice, isLoading, isError, refetch: refetchNotice } = useNotice(noticeId);
   const noticeDownloadUrl = useNoticeDownloadUrl(noticeId);
   const attachmentDownloadUrl = useAttachmentDownloadUrl();
   const { data: workflow, refetch: refetchWorkflow } = useWorkflowProgress(noticeId);
@@ -176,8 +176,24 @@ export default function NoticeDetailScreen() {
     return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
   };
 
-  if (isLoading || !notice) {
+  if (isLoading) {
     return <LoadingSpinner fullScreen message="Loading notice..." />;
+  }
+
+  // Error / deleted / not-found: show a recoverable state instead of an
+  // infinite spinner (audit B10).
+  if (isError || !notice) {
+    return (
+      <View style={styles.container}>
+        <EmptyState
+          type="error"
+          title="Notice not available"
+          message="This notice couldn't be loaded. It may have been deleted or you no longer have access."
+          actionLabel="Go back"
+          onAction={() => router.back()}
+        />
+      </View>
+    );
   }
 
   const tabs: { key: TabType; label: string; count?: number }[] = [

@@ -7,6 +7,7 @@ import { create } from 'zustand';
 import { Appearance, ColorSchemeName } from 'react-native';
 import NetInfo, { NetInfoState } from '@react-native-community/netinfo';
 import { getDarkModeEnabled, setDarkModeEnabled as persistDarkMode } from '../services/storage/secure';
+import { useOfflineStore } from './offlineStore';
 
 interface Toast {
   id: string;
@@ -88,20 +89,27 @@ export const useUIStore = create<UIState>((set, get) => ({
    * Returns unsubscribe function
    */
   initializeNetInfo: () => {
-    const unsubscribe = NetInfo.addEventListener((state: NetInfoState) => {
-      set({
-        isOnline: state.isConnected ?? false,
-        connectionType: state.type,
-      });
-    });
+    // Treat a captive portal (connected but no real internet) as offline by
+    // also honouring isInternetReachable (audit B-netinfo).
+    const computeOnline = (state: NetInfoState) =>
+      (state.isConnected ?? false) && state.isInternetReachable !== false;
 
-    // Get initial state
-    NetInfo.fetch().then((state) => {
-      set({
-        isOnline: state.isConnected ?? false,
-        connectionType: state.type,
-      });
-    });
+    const handleState = (state: NetInfoState) => {
+      const wasOnline = get().isOnline;
+      const nowOnline = computeOnline(state);
+      set({ isOnline: nowOnline, connectionType: state.type });
+
+      // Auto-flush the offline queue on an offline → online transition, instead
+      // of relying on the user pressing the banner's Sync button (audit B3).
+      if (!wasOnline && nowOnline) {
+        useOfflineStore.getState().syncQueue().catch(() => {
+          /* best-effort; failures are retried with backoff */
+        });
+      }
+    };
+
+    const unsubscribe = NetInfo.addEventListener(handleState);
+    NetInfo.fetch().then(handleState);
 
     return unsubscribe;
   },

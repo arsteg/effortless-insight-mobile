@@ -10,6 +10,7 @@ import { UserDto, LoginResponse, TwoFactorRequiredResponse, CreateOrganizationRe
 
 const isWeb = Platform.OS === 'web';
 import { authApi, organizationsApi } from '../services/api';
+import { isApiError, setOnAuthFailure } from '../services/api/client';
 import {
   setTokens,
   clearTokens,
@@ -111,8 +112,14 @@ export const useAuthStore = create<AuthState>((set, get) => ({
         // If biometric is enabled, REQUIRE it before restoring the session —
         // otherwise it was never actually enforced (audit B4). On failure we
         // keep the tokens but stay unauthenticated; the login screen offers an
-        // "Unlock" retry and a password fallback.
-        if (biometricEnabled && get().biometricAvailable) {
+        // "Unlock" retry and a password fallback. If the sensor has become
+        // unavailable/unenrolled since it was enabled, that must NOT silently
+        // bypass the gate — fall back to password login (audit C3).
+        if (biometricEnabled) {
+          if (!get().biometricAvailable) {
+            set({ isLoading: false, isInitialized: true, isAuthenticated: false });
+            return;
+          }
           const unlocked = await get().authenticateWithBiometric();
           if (!unlocked) {
             set({ isLoading: false, isInitialized: true, isAuthenticated: false });
@@ -149,11 +156,16 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       const user = mapProfileToUser(profile);
       await setUser(user);
       set({ user, needsOnboarding: !user.organization?.id });
-    } catch {
-      // Tokens likely invalid — clear and de-authenticate.
-      await clearTokens();
-      await clearUser();
-      set({ isAuthenticated: false, user: null, needsOnboarding: false });
+    } catch (error) {
+      // Only de-authenticate when the server actually rejected the tokens.
+      // A network failure (offline cold start) must keep the cached session,
+      // otherwise offline support is defeated by being logged out on launch.
+      const status = isApiError(error) ? error.response?.status : undefined;
+      if (status === 401 || status === 403) {
+        await clearTokens();
+        await clearUser();
+        set({ isAuthenticated: false, user: null, needsOnboarding: false });
+      }
     }
   },
 
@@ -470,3 +482,16 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     }
   },
 }));
+
+// When the API client's token refresh definitively fails it clears stored
+// tokens; without this hook the in-memory store would keep reporting an
+// authenticated session whose every request 401s until app restart.
+setOnAuthFailure(() => {
+  useAuthStore.setState({
+    isAuthenticated: false,
+    user: null,
+    requires2fa: false,
+    partialToken: null,
+    needsOnboarding: false,
+  });
+});

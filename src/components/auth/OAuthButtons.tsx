@@ -16,6 +16,7 @@ import * as Linking from 'expo-linking';
 import { Svg, Path } from 'react-native-svg';
 
 import { authApi } from '../../services/api';
+import { setTokens } from '../../services/storage/secure';
 import { OAuthProviderInfo } from '../../types';
 import { COLORS, SPACING, FONT_SIZES, BORDER_RADIUS } from '../../utils/constants';
 
@@ -137,7 +138,11 @@ export function OAuthButtons({
         const refreshToken = url.searchParams.get('refreshToken');
 
         if (accessToken && refreshToken) {
-          // Tokens received directly from web callback - fetch user profile
+          // Tokens received directly from web callback. They must be persisted
+          // BEFORE calling any authenticated endpoint — the request
+          // interceptor reads storage, so fetching the profile first would go
+          // out with a stale/absent token.
+          await setTokens(accessToken, refreshToken);
           const profile = await authApi.getProfile();
           onSuccess({
             accessToken,
@@ -151,6 +156,11 @@ export function OAuthButtons({
 
           if (!code) {
             throw new Error('No authorization code or tokens received');
+          }
+          // CSRF check: the state echoed back must match the one issued for
+          // this login attempt.
+          if (returnedState && returnedState !== state) {
+            throw new Error('OAuth state mismatch - please try signing in again');
           }
 
           // Send the code to our backend to exchange for tokens

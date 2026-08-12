@@ -24,6 +24,10 @@
       }
     },
     "production": {
+      "autoIncrement": true,
+      "env": {
+        "EXPO_PUBLIC_API_URL": "https://api.effortlessinsight.in"
+      },
       "android": {
         "buildType": "app-bundle"
       },

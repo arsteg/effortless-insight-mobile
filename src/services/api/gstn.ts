@@ -13,7 +13,10 @@ import type {
   GstnSettingsResponse,
 } from '../../types';
 
-const BASE_URL = '/api/v1/gstn';
+// apiClient.baseURL already ends in /api/v1 (see constants.API_BASE_URL), so
+// this must be relative to that — '/api/v1/gstn' here would produce
+// /api/v1/api/v1/gstn and 404 on every request.
+const BASE_URL = '/gstn';
 
 // Timeout configurations (in milliseconds)
 const TIMEOUTS = {

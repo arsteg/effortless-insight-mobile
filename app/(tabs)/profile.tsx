@@ -1,4 +1,4 @@
-/**
+﻿/**
  * Profile/Settings Screen
  */
 
@@ -128,7 +128,7 @@ export default function ProfileScreen() {
         {
           text: 'Open Web App',
           onPress: () => {
-            Linking.openURL('https://app.effortlessinsight.com/settings/organization');
+            Linking.openURL('https://app.effortlessinsight.in/settings/organization');
           },
         },
       ]
@@ -137,7 +137,7 @@ export default function ProfileScreen() {
 
   const handleHelpCenter = async () => {
     try {
-      await WebBrowser.openBrowserAsync('https://help.effortlessinsight.com');
+      await WebBrowser.openBrowserAsync('https://help.effortlessinsight.in');
     } catch (error) {
       Alert.alert('Error', 'Could not open help center');
     }
@@ -146,12 +146,12 @@ export default function ProfileScreen() {
   const handleAbout = () => {
     Alert.alert(
       'About EffortlessInsight',
-      `Version: 1.0.0\nBuild: Mobile App\n\nEffortlessInsight helps you manage GST notices efficiently with AI-powered analysis and collaborative workflows.\n\n© 2024 EffortlessInsight. All rights reserved.`,
+      `Version: 1.0.0\nBuild: Mobile App\n\nEffortlessInsight helps you manage GST notices efficiently with AI-powered analysis and collaborative workflows.\n\nÂ© 2024 EffortlessInsight. All rights reserved.`,
       [
         { text: 'OK' },
         {
           text: 'Visit Website',
-          onPress: () => Linking.openURL('https://effortlessinsight.com'),
+          onPress: () => Linking.openURL('https://effortlessinsight.in'),
         },
       ]
     );
@@ -159,17 +159,17 @@ export default function ProfileScreen() {
 
   const handlePrivacyPolicy = async () => {
     try {
-      await WebBrowser.openBrowserAsync('https://effortlessinsight.com/privacy');
+      await WebBrowser.openBrowserAsync('https://effortlessinsight.in/privacy');
     } catch (error) {
-      Linking.openURL('https://effortlessinsight.com/privacy');
+      Linking.openURL('https://effortlessinsight.in/privacy');
     }
   };
 
   const handleTermsOfService = async () => {
     try {
-      await WebBrowser.openBrowserAsync('https://effortlessinsight.com/terms');
+      await WebBrowser.openBrowserAsync('https://effortlessinsight.in/terms');
     } catch (error) {
-      Linking.openURL('https://effortlessinsight.com/terms');
+      Linking.openURL('https://effortlessinsight.in/terms');
     }
   };
 
@@ -230,12 +230,12 @@ export default function ProfileScreen() {
 
       {/* Preferences Section */}
       <View style={styles.section}>
-        <Text style={styles.sectionTitle}>{isHindi ? 'प्राथमिकताएं' : 'Preferences'}</Text>
+        <Text style={styles.sectionTitle}>{isHindi ? 'à¤ªà¥à¤°à¤¾à¤¥à¤®à¤¿à¤•à¤¤à¤¾à¤à¤‚' : 'Preferences'}</Text>
 
         <SettingItem
           icon={<Languages size={20} color={COLORS.gray[500]} />}
           label={t('profile.language')}
-          value={isHindi ? 'हिन्दी' : 'English'}
+          value={isHindi ? 'à¤¹à¤¿à¤¨à¥à¤¦à¥€' : 'English'}
           onPress={handleLanguage}
         />
 
@@ -243,7 +243,7 @@ export default function ProfileScreen() {
             do-nothing local toggle (audit B6). */}
         <SettingItem
           icon={<Bell size={20} color={COLORS.gray[500]} />}
-          label={isHindi ? 'सूचना सेटिंग्स' : 'Notification Settings'}
+          label={isHindi ? 'à¤¸à¥‚à¤šà¤¨à¤¾ à¤¸à¥‡à¤Ÿà¤¿à¤‚à¤—à¥à¤¸' : 'Notification Settings'}
           onPress={() => router.push('/settings/notifications')}
         />
 
@@ -311,7 +311,7 @@ export default function ProfileScreen() {
         <TouchableOpacity onPress={handlePrivacyPolicy}>
           <Text style={styles.footerLink}>Privacy Policy</Text>
         </TouchableOpacity>
-        <Text style={styles.footerDot}>•</Text>
+        <Text style={styles.footerDot}>â€¢</Text>
         <TouchableOpacity onPress={handleTermsOfService}>
           <Text style={styles.footerLink}>Terms of Service</Text>
         </TouchableOpacity>

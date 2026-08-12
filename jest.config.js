@@ -7,7 +7,7 @@ module.exports = {
   setupFiles: ['<rootDir>/jest.setup.js'],
   // These packages ship untranspiled ESM/Flow and must be transformed by Babel.
   transformIgnorePatterns: [
-    'node_modules/(?!((jest-)?react-native|@react-native(-community)?|expo(nent)?|@expo(nent)?/.*|@expo-google-fonts/.*|react-navigation|@react-navigation/.*|@unimodules/.*|unimodules|sentry-expo|native-base|react-native-svg|@react-native-async-storage/.*|expo-router|expo-modules-core|pdf-lib)/)',
+    'node_modules/(?!((jest-)?react-native|@react-native(-community)?|expo(nent)?(-.*)?|@expo(nent)?/.*|@expo-google-fonts/.*|react-navigation|@react-navigation/.*|@unimodules/.*|unimodules|sentry-expo|native-base|react-native-svg|@react-native-async-storage/.*|pdf-lib)/)',
   ],
   moduleNameMapper: {
     '^@/(.*)$': '<rootDir>/src/$1',

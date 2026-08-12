@@ -38,6 +38,11 @@ pnpm-debug.log*
 # React Native bundle
 *.jsbundle
 
+# Store / push credentials — never commit these
+google-play-service-account.json
+google-services.json
+GoogleService-Info.plist
+
 # Environment variables
 .env
 .env.local

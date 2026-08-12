@@ -308,7 +308,10 @@ export default function UploadScreen() {
     setScanState('uploading');
 
     try {
-      if (isMultiPageMode && pages.length > 1) {
+      // In multi-page mode captured images live in `pages` and `capturedImage`
+      // stays null, so even a single page must go through the PDF path — the
+      // else-branch would dereference a null capturedImage.
+      if (isMultiPageMode && pages.length >= 1) {
         // Generate PDF from multiple pages
         const validation = validatePages(pages);
         if (!validation.valid) {

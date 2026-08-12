@@ -12,7 +12,7 @@ import Constants from "expo-constants";
 const RESOLVED_API_URL =
   process.env.EXPO_PUBLIC_API_URL ||
   (Constants.expoConfig?.extra?.apiUrl as string | undefined) ||
-  "https://api.effortlessinsight.com";
+  "https://api.effortlessinsight.in";
 
 export const API_CONFIG = {
   BASE_URL: RESOLVED_API_URL,
@@ -147,12 +147,14 @@ export const BORDER_RADIUS = {
   full: 9999,
 } as const;
 
-// File Upload
+// File Upload — MAX_SIZE mirrors the backend's 25 MB notice-upload limit
+// (FileValidationService / [RequestSizeLimit] on /notices/upload).
 export const FILE_CONFIG = {
-  MAX_SIZE_MB: 10,
-  MAX_SIZE_BYTES: 10 * 1024 * 1024,
+  MAX_SIZE_MB: 25,
+  MAX_SIZE_BYTES: 25 * 1024 * 1024,
   ALLOWED_TYPES: ["image/jpeg", "image/png", "application/pdf"],
   ALLOWED_EXTENSIONS: [".jpg", ".jpeg", ".png", ".pdf"],
+  UPLOAD_TIMEOUT_MS: 120000,
 } as const;
 
 // Offline Queue

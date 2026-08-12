@@ -26,7 +26,9 @@ import { COLORS, SPACING, FONT_SIZES, BORDER_RADIUS } from '../../src/utils/cons
 
 const loginSchema = z.object({
   email: z.string().email('Please enter a valid email address'),
-  password: z.string().min(6, 'Password must be at least 6 characters'),
+  // Server is the source of truth for password rules; on login we only
+  // require a value (legacy accounts may predate current policy).
+  password: z.string().min(1, 'Password is required'),
   rememberMe: z.boolean().optional(),
 });
 
@@ -87,7 +89,10 @@ export default function LoginScreen() {
       setError(null);
       await login(data.email, data.password, data.rememberMe);
 
-      if (!requires2fa) {
+      // `requires2fa` from the render closure is stale here — read the store's
+      // post-login state, or this navigates to the tabs even when a 2FA step
+      // is pending (the 2FA effect then races it).
+      if (!useAuthStore.getState().requires2fa) {
         router.replace('/(tabs)');
       }
     } catch (err) {

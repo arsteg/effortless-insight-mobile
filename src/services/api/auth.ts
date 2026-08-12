@@ -3,6 +3,7 @@
  */
 
 import { Platform } from 'react-native';
+import Constants from 'expo-constants';
 import { apiClient } from './client';
 import {
   LoginRequest,
@@ -35,7 +36,7 @@ interface ApiResponse<T> {
 const getDeviceInfo = () => ({
   platform: Platform.OS as 'ios' | 'android',
   deviceName: Platform.OS === 'ios' ? 'iPhone' : 'Android Device',
-  appVersion: '1.0.0', // TODO: Get from app.json
+  appVersion: Constants.expoConfig?.version ?? '1.0.0',
 });
 
 export const authApi = {
@@ -164,24 +165,9 @@ export const authApi = {
     return response.data.data;
   },
 
-  /**
-   * Register push notification token
-   */
-  registerPushToken: async (token: string): Promise<void> => {
-    await apiClient.post('/notifications/register', {
-      token,
-      platform: Platform.OS,
-    });
-  },
-
-  /**
-   * Unregister push notification token
-   */
-  unregisterPushToken: async (token: string): Promise<void> => {
-    await apiClient.delete('/notifications/unregister', {
-      data: { token },
-    });
-  },
+  // Push token registration lives in notificationsApi (/push-tokens) — the
+  // pair that used to live here targeted /notifications/register, an endpoint
+  // that does not exist on the backend.
 
   // ============================================
   // OAuth Methods

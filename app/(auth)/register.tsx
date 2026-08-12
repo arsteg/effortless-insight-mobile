@@ -295,14 +295,14 @@ export default function RegisterScreen() {
                     I agree to the{' '}
                     <Text
                       style={styles.termsLink}
-                      onPress={() => Linking.openURL('https://effortlessinsight.com/terms')}
+                      onPress={() => Linking.openURL('https://effortlessinsight.in/terms')}
                     >
                       Terms of Service
                     </Text>
                     {' '}and{' '}
                     <Text
                       style={styles.termsLink}
-                      onPress={() => Linking.openURL('https://effortlessinsight.com/privacy')}
+                      onPress={() => Linking.openURL('https://effortlessinsight.in/privacy')}
                     >
                       Privacy Policy
                     </Text>

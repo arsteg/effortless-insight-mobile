@@ -2,6 +2,7 @@
  * Notices API Service
  */
 
+import * as FileSystem from 'expo-file-system/legacy';
 import { apiClient } from './client';
 import {
   NoticeDto,
@@ -22,7 +23,7 @@ import {
   MarkSubmittedRequest,
   ApiResponse,
 } from '../../types';
-import { PAGINATION } from '../../utils/constants';
+import { FILE_CONFIG, PAGINATION } from '../../utils/constants';
 
 export const noticesApi = {
   /**
@@ -76,6 +77,21 @@ export const noticesApi = {
     file: { uri: string; type: string; name: string },
     onProgress?: (progress: number) => void
   ): Promise<NoticeUploadResponse> => {
+    // Reject files over the backend's 25 MB limit before burning upload
+    // bandwidth; the server would 413/400 with a generic message otherwise.
+    try {
+      const info = await FileSystem.getInfoAsync(file.uri);
+      if (info.exists && typeof info.size === 'number' && info.size > FILE_CONFIG.MAX_SIZE_BYTES) {
+        const sizeMb = (info.size / (1024 * 1024)).toFixed(1);
+        throw new Error(
+          `File is too large (${sizeMb} MB). The maximum allowed size is ${FILE_CONFIG.MAX_SIZE_MB} MB.`
+        );
+      }
+    } catch (error) {
+      if (error instanceof Error && error.message.includes('too large')) throw error;
+      // Size probe failed (e.g. content:// uri) — let the server validate.
+    }
+
     const formData = new FormData();
     formData.append('file', {
       uri: file.uri,
@@ -87,6 +103,9 @@ export const noticesApi = {
       headers: {
         'Content-Type': 'multipart/form-data',
       },
+      // Multipart uploads on slow networks routinely exceed the global 30 s
+      // timeout; give them their own budget.
+      timeout: FILE_CONFIG.UPLOAD_TIMEOUT_MS,
       onUploadProgress: (progressEvent) => {
         if (progressEvent.total && onProgress) {
           const progress = Math.round((progressEvent.loaded * 100) / progressEvent.total);
@@ -206,19 +225,33 @@ export const noticesApi = {
    * Get workflow progress
    */
   getWorkflowProgress: async (noticeId: string): Promise<WorkflowProgressDto> => {
-    const response = await apiClient.get<ApiResponse<WorkflowProgressDto>>(`/notices/${noticeId}/workflow/progress`);
-    return response.data.data;
+    // WorkflowController lives under /workflows and returns bare DTOs (no
+    // { success, data } envelope). Available transitions are a separate
+    // endpoint, so fetch both and merge into the shape the UI expects.
+    const [progressRes, transitionsRes] = await Promise.all([
+      apiClient.get<WorkflowProgressDto>(`/workflows/notices/${noticeId}/progress`),
+      apiClient.get<{ stageKey: string; name: string; description?: string }[]>(
+        `/workflows/notices/${noticeId}/available-transitions`
+      ),
+    ]);
+    return {
+      ...progressRes.data,
+      availableTransitions: (transitionsRes.data ?? []).map((stage) => ({
+        key: stage.stageKey,
+        label: stage.name,
+        description: stage.description,
+      })),
+    };
   },
 
   /**
    * Advance workflow to next stage
    */
   advanceWorkflow: async (noticeId: string, transitionKey: string): Promise<WorkflowProgressDto> => {
-    const response = await apiClient.post<ApiResponse<WorkflowProgressDto>>(
-      `/notices/${noticeId}/workflow/transition`,
-      { transitionKey }
-    );
-    return response.data.data;
+    await apiClient.post(`/workflows/notices/${noticeId}/transition`, {
+      targetStageKey: transitionKey,
+    });
+    return noticesApi.getWorkflowProgress(noticeId);
   },
 
   // ========== Response Methods ==========

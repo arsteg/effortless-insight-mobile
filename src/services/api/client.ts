@@ -16,6 +16,15 @@ export const apiClient: AxiosInstance = axios.create({
   },
 });
 
+// Called when a token refresh definitively fails and stored tokens have been
+// cleared. Registered by the auth store so the in-memory auth state can't
+// drift from storage (a "zombie" authenticated UI whose requests all 401).
+let onAuthFailure: (() => void) | null = null;
+
+export function setOnAuthFailure(handler: (() => void) | null): void {
+  onAuthFailure = handler;
+}
+
 // Track if we're currently refreshing the token
 let isRefreshing = false;
 let failedQueue: Array<{
@@ -67,6 +76,7 @@ apiClient.interceptors.response.use(
       // Don't retry for refresh token endpoint itself
       if (originalRequest.url?.includes('/auth/refresh')) {
         await clearTokens();
+        onAuthFailure?.();
         return Promise.reject(error);
       }
 
@@ -109,6 +119,7 @@ apiClient.interceptors.response.use(
       } catch (refreshError) {
         processQueue(refreshError as Error, null);
         await clearTokens();
+        onAuthFailure?.();
         return Promise.reject(refreshError);
       } finally {
         isRefreshing = false;
@@ -126,7 +137,31 @@ export function isApiError(error: unknown): error is AxiosError<ApiErrorResponse
 
 export function getApiErrorMessage(error: unknown): string {
   if (isApiError(error)) {
-    return error.response?.data?.message || error.message || 'An unexpected error occurred';
+    const data = error.response?.data as
+      | (ApiErrorResponse & {
+          // ASP.NET ValidationProblemDetails shape for 400 validation errors
+          title?: string;
+          errors?: Record<string, string[]>;
+        })
+      | undefined;
+
+    if (data?.message) {
+      return data.message;
+    }
+    // Flatten the first field error from ValidationProblemDetails so users
+    // see "Password should not contain..." instead of the raw axios string.
+    if (data?.errors) {
+      const firstField = Object.values(data.errors).find(
+        (messages) => Array.isArray(messages) && messages.length > 0
+      );
+      if (firstField && firstField[0]) {
+        return firstField[0];
+      }
+    }
+    if (data?.title) {
+      return data.title;
+    }
+    return error.message || 'An unexpected error occurred';
   }
   if (error instanceof Error) {
     return error.message;

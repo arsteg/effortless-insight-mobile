@@ -2,7 +2,7 @@
   "expo": {
     "name": "EffortlessInsight",
     "slug": "effortlessinsight",
-    "version": "1.0.0",
+    "version": "1.0.1",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "scheme": "effortlessinsight",
@@ -12,7 +12,7 @@
     ],
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.effortlessinsight.app",
+      "bundleIdentifier": "com.arsteg.effortlessinsightapp",
       "buildNumber": "1",
       "googleServicesFile": "./GoogleService-Info.plist",
       "infoPlist": {
@@ -29,14 +29,15 @@
         "foregroundImage": "./assets/adaptive-icon.png",
         "backgroundColor": "#0ea5e9"
       },
-      "package": "com.effortlessinsight.app",
-      "versionCode": 1,
+      "package": "com.arsteg.effortlessinsightapp",
+      "versionCode": 2,
       "googleServicesFile": "./google-services.json",
       "permissions": [
         "android.permission.CAMERA",
         "android.permission.READ_EXTERNAL_STORAGE",
         "android.permission.RECEIVE_BOOT_COMPLETED",
-        "android.permission.VIBRATE"
+        "android.permission.VIBRATE",
+        "android.permission.RECORD_AUDIO"
       ]
     },
     "web": {
@@ -53,7 +54,6 @@
         {
           "icon": "./assets/notification-icon.png",
           "color": "#0ea5e9",
-          "defaultChannel": "default",
           "sounds": [
             "./assets/sounds/notification.wav"
           ]
@@ -71,7 +71,17 @@
       "expo-status-bar",
       "expo-local-authentication",
       "expo-localization",
-      "expo-web-browser"
+      "expo-web-browser",
+      "@react-native-firebase/app",
+      "@react-native-firebase/messaging",
+      [
+        "expo-build-properties",
+        {
+          "ios": {
+            "useFrameworks": "static"
+          }
+        }
+      ]
     ],
     "experiments": {
       "typedRoutes": true
@@ -81,10 +91,10 @@
         "origin": false
       },
       "eas": {
-        "projectId": "effortless-insight-mobile"
+        "projectId": "de878ddc-717c-43ac-b9ba-659f34c96b24"
       },
       "apiUrl": "https://api.effortlessinsight.in"
     },
-    "owner": "effortlessinsight"
+    "owner": "arsteg"
   }
 }

@@ -4,7 +4,7 @@
  */
 
 import { Platform, Alert } from 'react-native';
-import * as Notifications from 'expo-notifications';
+import type * as NotificationsTypes from 'expo-notifications';
 import * as Device from 'expo-device';
 import Constants from 'expo-constants';
 import { router } from 'expo-router';
@@ -13,29 +13,47 @@ import { notificationsApi } from './api/notifications';
 import { NOTIFICATION_CHANNELS } from '../utils/constants';
 import type { NotificationData } from '../types/notification';
 
-// Configure notification handler behavior
-Notifications.setNotificationHandler({
-  handleNotification: async (notification) => {
-    const data = notification.request.content.data as NotificationData;
-    const priority = (data?.priority as string) || 'medium';
-    const shouldSound = priority === 'critical' || priority === 'high';
+// expo-notifications' Android push module was removed from Expo Go in SDK 53+
+// and throws at import time there, so load it lazily and no-op every export in
+// Expo Go. Full behavior is preserved in development/production builds.
+const isExpoGo = Constants.executionEnvironment === 'storeClient';
+// eslint-disable-next-line @typescript-eslint/no-require-imports
+const Notifications: typeof NotificationsTypes | null = isExpoGo
+  ? null
+  : require('expo-notifications');
 
-    return {
-      shouldShowAlert: true,
-      shouldPlaySound: shouldSound,
-      shouldSetBadge: true,
-      shouldShowBanner: true,
-      shouldShowList: true,
-    };
-  },
-});
+const noopSubscription = { remove: () => {} } as NotificationsTypes.Subscription;
+
+// TEMP (testing only): allow remote push on emulators in dev builds. Emulator
+// images WITH Google Play services can receive FCM, so the Device.isDevice
+// guard below is relaxed under __DEV__. Remove before production if undesired.
+const allowEmulatorPush = __DEV__;
+
+// Configure notification handler behavior
+if (Notifications) {
+  Notifications.setNotificationHandler({
+    handleNotification: async (notification) => {
+      const data = notification.request.content.data as NotificationData;
+      const priority = (data?.priority as string) || 'medium';
+      const shouldSound = priority === 'critical' || priority === 'high';
+
+      return {
+        shouldShowAlert: true,
+        shouldPlaySound: shouldSound,
+        shouldSetBadge: true,
+        shouldShowBanner: true,
+        shouldShowList: true,
+      };
+    },
+  });
+}
 
 /**
  * Setup Android notification channels
  * Must be called early in app initialization
  */
 export async function setupNotificationChannels(): Promise<void> {
-  if (Platform.OS !== 'android') return;
+  if (!Notifications || Platform.OS !== 'android') return;
 
   // Critical deadline alerts - high priority
   await Notifications.setNotificationChannelAsync(NOTIFICATION_CHANNELS.DEADLINE_CRITICAL, {
@@ -90,8 +108,8 @@ export async function setupNotificationChannels(): Promise<void> {
  * Request notification permissions
  */
 export async function requestNotificationPermissions(): Promise<boolean> {
-  if (!Device.isDevice) {
-    console.warn('Push notifications require a physical device');
+  if (!Notifications || (!Device.isDevice && !allowEmulatorPush)) {
+    console.warn('Push notifications require a physical device and a development build');
     return false;
   }
 
@@ -106,11 +124,20 @@ export async function requestNotificationPermissions(): Promise<boolean> {
 }
 
 /**
- * Get Expo push token
+ * Get the push token to register with the backend.
+ *
+ * Android: the NATIVE FCM registration token (getDevicePushTokenAsync) — the
+ * backend routes non-Expo tokens directly through the Firebase Admin SDK, so
+ * delivery is API -> FCM -> device with no Expo push service in the path.
+ *
+ * iOS: the FCM token from @react-native-firebase/messaging. A raw APNs token
+ * (what getDevicePushTokenAsync returns on iOS) cannot be addressed by the
+ * Firebase Admin SDK, so the FCM iOS SDK bridges APNs -> FCM. Requires the
+ * GoogleService-Info.plist + APNs .p8 key uploaded in the Firebase console.
  */
-export async function getExpoPushToken(): Promise<string | null> {
+export async function getNativePushToken(): Promise<string | null> {
   try {
-    if (!Device.isDevice) {
+    if (!Notifications || (!Device.isDevice && !allowEmulatorPush)) {
       console.warn('Push notifications require a physical device');
       return null;
     }
@@ -122,20 +149,19 @@ export async function getExpoPushToken(): Promise<string | null> {
       return null;
     }
 
-    // Get the project ID from expo config
-    const projectId = Constants.expoConfig?.extra?.eas?.projectId ??
-      Constants.easConfig?.projectId;
-
-    if (!projectId) {
-      console.error('No projectId found for push notifications');
-      return null;
+    if (Platform.OS === 'android') {
+      const tokenData = await Notifications.getDevicePushTokenAsync();
+      return typeof tokenData.data === 'string' ? tokenData.data : null;
     }
 
-    const tokenData = await Notifications.getExpoPushTokenAsync({
-      projectId,
-    });
-
-    return tokenData.data;
+    // iOS: FCM token via the Firebase iOS SDK. Lazy require - the native module
+    // only exists in builds made after @react-native-firebase was added, and
+    // never in Expo Go.
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const messaging = require('@react-native-firebase/messaging').default;
+    await messaging().registerDeviceForRemoteMessages();
+    const fcmToken: string = await messaging().getToken();
+    return fcmToken || null;
   } catch (error) {
     console.error('Error getting push token:', error);
     return null;
@@ -147,7 +173,7 @@ export async function getExpoPushToken(): Promise<string | null> {
  */
 export async function registerPushToken(): Promise<boolean> {
   try {
-    const token = await getExpoPushToken();
+    const token = await getNativePushToken();
     if (!token) {
       return false;
     }
@@ -205,7 +231,8 @@ export async function registerPushTokenWithRetry(maxAttempts = 3): Promise<boole
  * rotation). Without this the app registers only once per session and rotated
  * tokens silently stop receiving pushes (audit MO-05).
  */
-export function addPushTokenRotationListener(): Notifications.Subscription {
+export function addPushTokenRotationListener(): NotificationsTypes.Subscription {
+  if (!Notifications) return noopSubscription;
   return Notifications.addPushTokenListener(() => {
     console.log('Push token rotated; re-registering');
     registerPushTokenWithRetry();
@@ -275,8 +302,17 @@ export function navigateForNotificationData(data: NotificationData | null | unde
   }
 }
 
-export function handleNotificationTap(notification: Notifications.Notification): void {
+export function handleNotificationTap(notification: NotificationsTypes.Notification): void {
   navigateForNotificationData(notification.request.content.data as NotificationData);
+}
+
+/**
+ * Read the notification response that cold-started the app, if any.
+ * Returns null in Expo Go, where the push module is unavailable.
+ */
+export async function getLastNotificationResponse(): Promise<NotificationsTypes.NotificationResponse | null> {
+  if (!Notifications) return null;
+  return await Notifications.getLastNotificationResponseAsync();
 }
 
 /**
@@ -324,6 +360,8 @@ export async function scheduleLocalNotification(
   data?: NotificationData,
   seconds = 1
 ): Promise<string> {
+  if (!Notifications) return '';
+
   const channelId = data?.type
     ? getNotificationChannel(data.type as string, (data.priority as string) || 'medium')
     : NOTIFICATION_CHANNELS.TASKS;
@@ -349,20 +387,21 @@ export async function scheduleLocalNotification(
  * Cancel a scheduled notification
  */
 export async function cancelNotification(identifier: string): Promise<void> {
-  await Notifications.cancelScheduledNotificationAsync(identifier);
+  await Notifications?.cancelScheduledNotificationAsync(identifier);
 }
 
 /**
  * Cancel all scheduled notifications
  */
 export async function cancelAllNotifications(): Promise<void> {
-  await Notifications.cancelAllScheduledNotificationsAsync();
+  await Notifications?.cancelAllScheduledNotificationsAsync();
 }
 
 /**
  * Get badge count
  */
 export async function getBadgeCount(): Promise<number> {
+  if (!Notifications) return 0;
   return await Notifications.getBadgeCountAsync();
 }
 
@@ -370,26 +409,27 @@ export async function getBadgeCount(): Promise<number> {
  * Set badge count
  */
 export async function setBadgeCount(count: number): Promise<void> {
-  await Notifications.setBadgeCountAsync(count);
+  await Notifications?.setBadgeCountAsync(count);
 }
 
 /**
  * Clear badge
  */
 export async function clearBadge(): Promise<void> {
-  await Notifications.setBadgeCountAsync(0);
+  await Notifications?.setBadgeCountAsync(0);
 }
 
 // Notification listener types
-export type NotificationReceivedListener = (notification: Notifications.Notification) => void;
-export type NotificationResponseListener = (response: Notifications.NotificationResponse) => void;
+export type NotificationReceivedListener = (notification: NotificationsTypes.Notification) => void;
+export type NotificationResponseListener = (response: NotificationsTypes.NotificationResponse) => void;
 
 /**
  * Add notification received listener
  */
 export function addNotificationReceivedListener(
   listener: NotificationReceivedListener
-): Notifications.Subscription {
+): NotificationsTypes.Subscription {
+  if (!Notifications) return noopSubscription;
   return Notifications.addNotificationReceivedListener(listener);
 }
 
@@ -398,6 +438,7 @@ export function addNotificationReceivedListener(
  */
 export function addNotificationResponseReceivedListener(
   listener: NotificationResponseListener
-): Notifications.Subscription {
+): NotificationsTypes.Subscription {
+  if (!Notifications) return noopSubscription;
   return Notifications.addNotificationResponseReceivedListener(listener);
 }

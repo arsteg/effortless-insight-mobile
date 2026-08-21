@@ -7,9 +7,9 @@ import { useEffect, useRef } from 'react';
 import { Stack, useRouter, useSegments } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { View, Platform, AppState } from 'react-native';
+import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import * as SplashScreen from 'expo-splash-screen';
-import * as Notifications from 'expo-notifications';
 import * as Linking from 'expo-linking';
 import { useAuthStore, useUIStore } from '../src/stores';
 import { ErrorBoundary, LoadingSpinner, OfflineBanner, ToastContainer } from '../src/components/common';
@@ -21,6 +21,7 @@ import {
   addPushTokenRotationListener,
   handleNotificationTap,
   addNotificationResponseReceivedListener,
+  getLastNotificationResponse,
 } from '../src/services/pushNotifications';
 
 // Prevent splash screen from auto-hiding
@@ -97,7 +98,7 @@ function RootLayoutNav() {
 
     let cancelled = false;
     (async () => {
-      const lastResponse = await Notifications.getLastNotificationResponseAsync();
+      const lastResponse = await getLastNotificationResponse();
       if (!cancelled && lastResponse) {
         coldStartHandledRef.current = true;
         handleNotificationTap(lastResponse.notification);
@@ -240,10 +241,12 @@ function RootLayoutNav() {
 
 export default function RootLayout() {
   return (
-    <ErrorBoundary>
-      <QueryClientProvider client={queryClient}>
-        <RootLayoutNav />
-      </QueryClientProvider>
-    </ErrorBoundary>
+    <GestureHandlerRootView style={{ flex: 1 }}>
+      <ErrorBoundary>
+        <QueryClientProvider client={queryClient}>
+          <RootLayoutNav />
+        </QueryClientProvider>
+      </ErrorBoundary>
+    </GestureHandlerRootView>
   );
 }

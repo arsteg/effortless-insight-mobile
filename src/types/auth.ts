@@ -41,6 +41,20 @@ export interface RegisterRequest {
   name: string;
   mobile?: string;
   acceptTerms: boolean;
+  /** Proof from verifySignupOtp that `mobile` passed OTP verification */
+  mobileVerificationToken?: string;
+}
+
+export interface SignupOtpResponse {
+  message: string;
+  maskedMobile: string;
+  expiresIn: number;
+  retryAfter: number;
+}
+
+export interface MobileVerificationResponse {
+  verificationToken: string;
+  expiresIn: number;
 }
 
 export interface RegisterResponse {

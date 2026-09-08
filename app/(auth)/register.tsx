@@ -2,7 +2,7 @@
  * Register Screen
  */
 
-import React, { useState } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   View,
   Text,
@@ -17,9 +17,9 @@ import { useRouter } from 'expo-router';
 import { useForm, Controller } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
-import { Mail, Lock, User, Phone } from 'lucide-react-native';
+import { Mail, Lock, User, Phone, ShieldCheck } from 'lucide-react-native';
 import { useAuthStore } from '../../src/stores';
-import { authApi, getApiErrorMessage } from '../../src/services/api';
+import { authApi, getApiErrorMessage, getApiErrorCode } from '../../src/services/api';
 import { Button, Input } from '../../src/components/common';
 import { OAuthButtons } from '../../src/components/auth';
 import { UserDto } from '../../src/types';
@@ -32,7 +32,10 @@ const registerSchema = z
   .object({
     name: z.string().min(2, 'Name must be at least 2 characters'),
     email: z.string().email('Please enter a valid email address'),
-    mobile: z.string().optional(),
+    mobile: z
+      .string()
+      .min(1, 'Mobile number is required')
+      .regex(/^[6-9]\d{9}$/, 'Please enter a valid 10-digit Indian mobile number'),
     password: z
       .string()
       .min(8, 'Password must be at least 8 characters')
@@ -65,9 +68,24 @@ export default function RegisterScreen() {
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState(false);
 
+  // Mobile OTP verification state — the backend rejects signups without a
+  // verification token; editing the mobile number resets the flow.
+  const [otpState, setOtpState] = useState<'idle' | 'sent' | 'verified'>('idle');
+  const [otpValue, setOtpValue] = useState('');
+  const [otpSending, setOtpSending] = useState(false);
+  const [otpVerifying, setOtpVerifying] = useState(false);
+  const [otpError, setOtpError] = useState<string | null>(null);
+  const [otpInfo, setOtpInfo] = useState<string | null>(null);
+  const [resendIn, setResendIn] = useState(0);
+  const [verificationToken, setVerificationToken] = useState<string | null>(null);
+  const otpMobileRef = useRef<string | null>(null);
+
   const {
     control,
     handleSubmit,
+    watch,
+    getValues,
+    setError: setFieldError,
     formState: { errors },
   } = useForm<RegisterFormData>({
     resolver: zodResolver(registerSchema),
@@ -81,7 +99,100 @@ export default function RegisterScreen() {
     },
   });
 
+  const watchedMobile = watch('mobile');
+
+  // Reset verification when the mobile number changes after send/verify
+  useEffect(() => {
+    if (otpState !== 'idle' && watchedMobile !== otpMobileRef.current) {
+      setOtpState('idle');
+      setOtpValue('');
+      setOtpError(null);
+      setOtpInfo(null);
+      setResendIn(0);
+      setVerificationToken(null);
+      otpMobileRef.current = null;
+    }
+  }, [watchedMobile, otpState]);
+
+  // Resend cooldown countdown
+  useEffect(() => {
+    if (resendIn <= 0) return;
+    const timer = setTimeout(() => setResendIn((s) => s - 1), 1000);
+    return () => clearTimeout(timer);
+  }, [resendIn]);
+
+  const handleSendOtp = async () => {
+    setOtpError(null);
+    setOtpInfo(null);
+    const mobile = getValues('mobile');
+    if (!/^[6-9]\d{9}$/.test(mobile)) {
+      setFieldError('mobile', {
+        type: 'manual',
+        message: 'Please enter a valid 10-digit Indian mobile number',
+      });
+      return;
+    }
+
+    setOtpSending(true);
+    try {
+      const result = await authApi.requestSignupOtp(mobile);
+      otpMobileRef.current = mobile;
+      setOtpState('sent');
+      setOtpValue('');
+      setResendIn(result.retryAfter || 60);
+      setOtpInfo(`OTP sent to ${result.maskedMobile}`);
+    } catch (err) {
+      const code = getApiErrorCode(err);
+      if (code === 'MOBILE_EXISTS') {
+        setFieldError('mobile', {
+          type: 'manual',
+          message: 'This mobile number is already registered. Try signing in instead.',
+        });
+      } else {
+        setOtpError(getApiErrorMessage(err));
+      }
+    } finally {
+      setOtpSending(false);
+    }
+  };
+
+  const handleVerifyOtp = async () => {
+    if (otpValue.length < 4) {
+      setOtpError('Please enter the OTP sent to your mobile');
+      return;
+    }
+    setOtpError(null);
+    setOtpVerifying(true);
+    try {
+      const result = await authApi.verifySignupOtp(otpMobileRef.current ?? '', otpValue, {
+        name: getValues('name'),
+        email: getValues('email'),
+      });
+      setVerificationToken(result.verificationToken);
+      setOtpState('verified');
+      setOtpInfo(null);
+    } catch (err) {
+      const code = getApiErrorCode(err);
+      if (code === 'MAX_ATTEMPTS_EXCEEDED') {
+        setOtpError('Too many incorrect attempts. Please request a new OTP.');
+        setOtpValue('');
+      } else {
+        setOtpError('Incorrect OTP. Please check and try again.');
+      }
+    } finally {
+      setOtpVerifying(false);
+    }
+  };
+
   const onSubmit = async (data: RegisterFormData) => {
+    if (otpState !== 'verified' || !verificationToken) {
+      setFieldError('mobile', {
+        type: 'manual',
+        message: 'Please verify your mobile number with OTP first',
+      });
+      return;
+    }
+
     try {
       setIsLoading(true);
       setError(null);
@@ -90,14 +201,28 @@ export default function RegisterScreen() {
         name: data.name,
         email: data.email,
         password: data.password,
-        mobile: data.mobile || undefined,
+        mobile: data.mobile,
         acceptTerms: data.acceptTerms,
+        mobileVerificationToken: verificationToken,
       });
 
       setSuccess(true);
     } catch (err) {
-      const message = getApiErrorMessage(err);
-      setError(message);
+      const code = getApiErrorCode(err);
+      if (code === 'MOBILE_NOT_VERIFIED' || code === 'MOBILE_REQUIRED') {
+        // Verification token expired or was consumed — restart the OTP flow
+        setOtpState('idle');
+        setOtpValue('');
+        setResendIn(0);
+        setVerificationToken(null);
+        otpMobileRef.current = null;
+        setFieldError('mobile', {
+          type: 'manual',
+          message: 'Mobile verification expired. Please verify your number again.',
+        });
+      } else {
+        setError(getApiErrorMessage(err));
+      }
     } finally {
       setIsLoading(false);
     }
@@ -231,9 +356,10 @@ export default function RegisterScreen() {
             name="mobile"
             render={({ field: { onChange, onBlur, value } }) => (
               <Input
-                label={t('auth.mobileNumberOptional')}
+                label="Mobile Number"
                 placeholder={t('auth.enterYourMobileNumber')}
                 keyboardType="phone-pad"
+                maxLength={10}
                 leftIcon={<Phone size={20} color={COLORS.gray[500]} />}
                 value={value}
                 onChangeText={onChange}
@@ -242,6 +368,52 @@ export default function RegisterScreen() {
               />
             )}
           />
+
+          {/* Mobile OTP verification */}
+          {otpState === 'verified' ? (
+            <View style={styles.otpVerifiedRow}>
+              <ShieldCheck size={16} color={COLORS.success} />
+              <Text style={styles.otpVerifiedText}>Mobile number verified</Text>
+            </View>
+          ) : (
+            <View style={styles.otpContainer}>
+              <Button
+                title={
+                  resendIn > 0
+                    ? `Resend OTP in ${resendIn}s`
+                    : otpState === 'sent'
+                      ? 'Resend OTP'
+                      : 'Send OTP'
+                }
+                onPress={handleSendOtp}
+                loading={otpSending}
+                disabled={isLoading || otpSending || resendIn > 0}
+                variant="outline"
+                fullWidth
+              />
+              {otpState === 'sent' && (
+                <View style={styles.otpVerifyBlock}>
+                  {otpInfo && <Text style={styles.otpInfoText}>{otpInfo}</Text>}
+                  <Input
+                    label="OTP"
+                    placeholder="Enter the 6-digit OTP"
+                    keyboardType="number-pad"
+                    maxLength={6}
+                    value={otpValue}
+                    onChangeText={(text) => setOtpValue(text.replace(/\D/g, ''))}
+                  />
+                  <Button
+                    title="Verify OTP"
+                    onPress={handleVerifyOtp}
+                    loading={otpVerifying}
+                    disabled={isLoading || otpVerifying || otpValue.length < 4}
+                    fullWidth
+                  />
+                </View>
+              )}
+              {otpError && <Text style={styles.otpErrorText}>{otpError}</Text>}
+            </View>
+          )}
 
           <Controller
             control={control}
@@ -317,9 +489,10 @@ export default function RegisterScreen() {
 
           {/* Register Button */}
           <Button
-            title={t('auth.createAccount')}
+            title={otpState !== 'verified' ? 'Verify mobile to continue' : t('auth.createAccount')}
             onPress={handleSubmit(onSubmit)}
             loading={isLoading}
+            disabled={otpState !== 'verified'}
             fullWidth
             size="lg"
           />
@@ -386,6 +559,33 @@ const createStyles = (COLORS: Palette) =>
   },
   form: {
     flex: 1,
+  },
+  otpContainer: {
+    marginBottom: SPACING.md,
+  },
+  otpVerifyBlock: {
+    marginTop: SPACING.sm,
+  },
+  otpInfoText: {
+    fontSize: FONT_SIZES.sm,
+    color: COLORS.gray[600],
+    marginBottom: SPACING.xs,
+  },
+  otpErrorText: {
+    fontSize: FONT_SIZES.sm,
+    color: COLORS.error,
+    marginTop: SPACING.xs,
+  },
+  otpVerifiedRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: SPACING.xs,
+    marginBottom: SPACING.md,
+  },
+  otpVerifiedText: {
+    fontSize: FONT_SIZES.sm,
+    color: COLORS.success,
+    fontWeight: '600',
   },
   termsContainer: {
     marginBottom: SPACING.lg,

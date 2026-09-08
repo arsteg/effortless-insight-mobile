@@ -10,6 +10,8 @@ import {
   LoginResponse,
   RegisterRequest,
   RegisterResponse,
+  SignupOtpResponse,
+  MobileVerificationResponse,
   TokenResponse,
   UserProfileDto,
   ForgotPasswordRequest,
@@ -59,6 +61,39 @@ export const authApi = {
    */
   register: async (data: RegisterRequest): Promise<RegisterResponse> => {
     const response = await apiClient.post<ApiResponse<RegisterResponse>>('/auth/register', data);
+    return response.data.data;
+  },
+
+  /**
+   * Request signup mobile OTP (backend enforces verification before signup)
+   */
+  requestSignupOtp: async (mobile: string): Promise<SignupOtpResponse> => {
+    const response = await apiClient.post<ApiResponse<SignupOtpResponse>>(
+      '/auth/signup/otp/request',
+      { mobile }
+    );
+    return response.data.data;
+  },
+
+  /**
+   * Verify signup mobile OTP. name/email let the backend record the lead for
+   * admin follow-up if the visitor verifies but never completes registration.
+   */
+  verifySignupOtp: async (
+    mobile: string,
+    otp: string,
+    details?: { name?: string; email?: string }
+  ): Promise<MobileVerificationResponse> => {
+    const response = await apiClient.post<ApiResponse<MobileVerificationResponse>>(
+      '/auth/signup/otp/verify',
+      {
+        mobile,
+        otp,
+        name: details?.name || undefined,
+        email: details?.email || undefined,
+        source: 'mobile',
+      }
+    );
     return response.data.data;
   },
 

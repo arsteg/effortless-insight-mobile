@@ -16,7 +16,12 @@ import {
 export interface CreateTaskDto {
   title: string;
   description?: string;
-  assignees: string[];
+  /**
+   * Optional. Omit it entirely to let the server assign the creator — sending
+   * an empty array is NOT the same thing and fails validation with
+   * "Must have between 1 and 5 assignees" (TC-MOB-044).
+   */
+  assignees?: string[];
   priority?: TaskPriority;
   dueDate?: string;
   estimatedHours?: number;
@@ -26,6 +31,12 @@ export interface CreateTaskDto {
 }
 
 export interface UpdateTaskDto {
+  /**
+   * The `updatedAt` the client was working from. Sent so the server can reject
+   * a queued edit whose target changed while it waited offline, rather than
+   * overwriting whoever got there first (TC-MOB-059).
+   */
+  expectedUpdatedAt?: string;
   title?: string;
   description?: string;
   assignees?: string[];

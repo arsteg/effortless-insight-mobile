@@ -11,23 +11,30 @@ import {
   TouchableOpacity,
   KeyboardAvoidingView,
   Platform,
+  BackHandler,
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { Shield, ArrowLeft } from 'lucide-react-native';
 import { useAuthStore } from '../../src/stores';
 import { Button } from '../../src/components/common';
-import { getApiErrorMessage } from '../../src/services/api';
-import { COLORS, SPACING, FONT_SIZES, BORDER_RADIUS } from '../../src/utils/constants';
+import { getApiErrorMessage, getApiErrorCode } from '../../src/services/api';
+import { SPACING, FONT_SIZES, BORDER_RADIUS } from '../../src/utils/constants';
+import { useColors, useThemedStyles } from '../../src/theme/useTheme';
+import type { Palette } from '../../src/theme/palettes';
+import { useTranslation } from '../../src/hooks';
 
 const CODE_LENGTH = 6;
 
 export default function TwoFactorScreen() {
+  const { t } = useTranslation();
+  const styles = useThemedStyles(createStyles);
+  const COLORS = useColors();
   const router = useRouter();
   const [code, setCode] = useState<string[]>(new Array(CODE_LENGTH).fill(''));
   const [error, setError] = useState<string | null>(null);
   const [useBackupCode, setUseBackupCode] = useState(false);
   const [backupCode, setBackupCode] = useState('');
-  const { complete2fa, isLoading, requires2fa } = useAuthStore();
+  const { complete2fa, cancel2fa, isLoading, requires2fa } = useAuthStore();
 
   const inputRefs = useRef<(TextInput | null)[]>([]);
 
@@ -37,6 +44,16 @@ export default function TwoFactorScreen() {
       router.replace('/(auth)/login');
     }
   }, [requires2fa]);
+
+  // Android's hardware back would otherwise pop to login and be bounced
+  // straight back here; route it through the same cancel path as the header.
+  React.useEffect(() => {
+    const subscription = BackHandler.addEventListener('hardwareBackPress', () => {
+      handleCancel();
+      return true;
+    });
+    return () => subscription.remove();
+  }, []);
 
   const handleCodeChange = (text: string, index: number) => {
     // Only allow digits
@@ -67,12 +84,39 @@ export default function TwoFactorScreen() {
     }
   };
 
+  /**
+   * Leaving 2FA must clear the pending state first. Navigating away with
+   * `requires2fa` still true sends the user to the login screen, whose effect
+   * immediately pushes them back here — an inescapable loop.
+   */
+  const handleCancel = () => {
+    cancel2fa();
+    router.replace('/(auth)/login');
+  };
+
+  /**
+   * The partial token lives for 5 minutes. Once it's gone there is nothing to
+   * retry, so drop the 2FA state and send the user back to sign in again
+   * rather than leaving them on a screen that can never succeed.
+   */
+  const handleExpiredSession = () => {
+    cancel2fa();
+    router.replace({
+      pathname: '/(auth)/login',
+      params: { notice: 'Your sign-in session expired. Please sign in again.' },
+    });
+  };
+
   const handleSubmit = async (fullCode: string) => {
     try {
       setError(null);
       await complete2fa(fullCode);
       router.replace('/(tabs)');
     } catch (err) {
+      if (getApiErrorCode(err) === 'INVALID_PARTIAL_TOKEN') {
+        handleExpiredSession();
+        return;
+      }
       const message = getApiErrorMessage(err);
       setError(message);
       setCode(new Array(CODE_LENGTH).fill(''));
@@ -100,6 +144,10 @@ export default function TwoFactorScreen() {
       await complete2fa(trimmed);
       router.replace('/(tabs)');
     } catch (err) {
+      if (getApiErrorCode(err) === 'INVALID_PARTIAL_TOKEN') {
+        handleExpiredSession();
+        return;
+      }
       setError(getApiErrorMessage(err));
       setBackupCode('');
     }
@@ -115,11 +163,16 @@ export default function TwoFactorScreen() {
   return (
     <KeyboardAvoidingView
       style={styles.container}
-      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+      behavior={Platform.OS === 'ios' ? 'padding' : undefined}
     >
       <View style={styles.content}>
         {/* Back Button */}
-        <TouchableOpacity style={styles.backButton} onPress={() => router.back()}>
+        <TouchableOpacity
+          style={styles.backButton}
+          onPress={handleCancel}
+          accessibilityRole="button"
+          accessibilityLabel="Cancel two-factor sign in"
+        >
           <ArrowLeft size={24} color={COLORS.gray[700]} />
         </TouchableOpacity>
 
@@ -130,7 +183,7 @@ export default function TwoFactorScreen() {
 
         {/* Header */}
         <View style={styles.header}>
-          <Text style={styles.title}>Two-Factor Authentication</Text>
+          <Text style={styles.title}>{t('auth.twoFactorAuthentication')}</Text>
           <Text style={styles.subtitle}>
             {useBackupCode
               ? 'Enter one of your backup codes to complete sign in.'
@@ -155,14 +208,14 @@ export default function TwoFactorScreen() {
                 setBackupCode(text);
                 setError(null);
               }}
-              placeholder="Enter backup code"
+              placeholder={t('auth.enterBackupCode')}
               autoCapitalize="characters"
               autoCorrect={false}
               autoFocus
             />
 
             <Button
-              title="Verify"
+              title={t('auth.verify')}
               onPress={handleBackupVerify}
               loading={isLoading}
               fullWidth
@@ -197,7 +250,7 @@ export default function TwoFactorScreen() {
             </View>
 
             <Button
-              title="Verify"
+              title={t('auth.verify')}
               onPress={handleVerify}
               loading={isLoading}
               fullWidth
@@ -221,7 +274,8 @@ export default function TwoFactorScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+const createStyles = (COLORS: Palette) =>
+  StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: COLORS.white,

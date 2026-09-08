@@ -3,7 +3,7 @@
  * Handles push notification registration, handlers, and Android channels
  */
 
-import { Platform, Alert } from 'react-native';
+import { Platform, Alert, Linking } from 'react-native';
 import type * as NotificationsTypes from 'expo-notifications';
 import * as Device from 'expo-device';
 import Constants from 'expo-constants';
@@ -11,11 +11,30 @@ import { router } from 'expo-router';
 import { setPushToken, getPushToken } from './storage/secure';
 import { notificationsApi } from './api/notifications';
 import { NOTIFICATION_CHANNELS } from '../utils/constants';
+import { getAppInfo, formatVersion } from '../utils/appInfo';
 import type { NotificationData } from '../types/notification';
 
 // expo-notifications' Android push module was removed from Expo Go in SDK 53+
 // and throws at import time there, so load it lazily and no-op every export in
 // Expo Go. Full behavior is preserved in development/production builds.
+/**
+ * NOTE ON APP TRACKING TRANSPARENCY (TC-MOB-071).
+ *
+ * Firebase is used here for PUSH ONLY. `IS_ADS_ENABLED` and
+ * `IS_ANALYTICS_ENABLED` are false in GoogleService-Info.plist, no analytics or
+ * advertising SDK is installed, and the IDFA is never read — so the app does no
+ * cross-company tracking and iOS ATT does not apply. There is deliberately no
+ * `NSUserTrackingUsageDescription` in app.json: adding that key declares the
+ * app tracks, and showing the ATT prompt without a tracking purpose is itself
+ * grounds for App Review rejection (guideline 5.1.2).
+ *
+ * IF YOU ADD Firebase Analytics, ads, or an attribution SDK (AppsFlyer,
+ * Adjust, Branch), ATT becomes mandatory and this all changes:
+ *   1. add `expo-tracking-transparency` and call
+ *      requestTrackingPermissionsAsync() before any tracking begins,
+ *   2. add NSUserTrackingUsageDescription to app.json,
+ *   3. update the App Store privacy labels to declare tracking.
+ */
 const isExpoGo = Constants.executionEnvironment === 'storeClient';
 // eslint-disable-next-line @typescript-eslint/no-require-imports
 const Notifications: typeof NotificationsTypes | null = isExpoGo
@@ -27,7 +46,12 @@ const noopSubscription = { remove: () => {} } as NotificationsTypes.Subscription
 // TEMP (testing only): allow remote push on emulators in dev builds. Emulator
 // images WITH Google Play services can receive FCM, so the Device.isDevice
 // guard below is relaxed under __DEV__. Remove before production if undesired.
-const allowEmulatorPush = __DEV__;
+//
+// Android only: the iOS Simulator has no APNs connection, so it cannot mint an
+// FCM token at all. Relaxing the guard there makes getToken() throw ("No APNS
+// token specified before retrieving FCM Token") instead of returning the clear
+// "requires a physical device" warning.
+const allowEmulatorPush = __DEV__ && Platform.OS === 'android';
 
 // Configure notification handler behavior
 if (Notifications) {
@@ -35,7 +59,14 @@ if (Notifications) {
     handleNotification: async (notification) => {
       const data = notification.request.content.data as NotificationData;
       const priority = (data?.priority as string) || 'medium';
-      const shouldSound = priority === 'critical' || priority === 'high';
+
+      // The server already applied the user's channel preferences and quiet
+      // hours before sending (NotificationEngineService), so anything that
+      // arrives is something they asked to be told about. Silencing `medium`
+      // here overrode that decision and left a notice assignment — the most
+      // common notification there is — mute in the foreground (TC-MOB-049).
+      // Only `low` stays silent, as background chatter while the app is in use.
+      const shouldSound = priority !== 'low';
 
       return {
         shouldShowAlert: true,
@@ -92,6 +123,20 @@ export async function setupNotificationChannels(): Promise<void> {
     sound: 'default',
   });
 
+  // General — the API's fallback channel id. Notice assignments, 7-day
+  // deadline warnings, GST sync and billing all arrive on this one, so it is
+  // not a rare edge case; without it the OS invents a "Miscellaneous" channel
+  // the user cannot meaningfully configure (TC-MOB-049).
+  await Notifications.setNotificationChannelAsync(NOTIFICATION_CHANNELS.DEFAULT, {
+    name: 'General',
+    description: 'Notice assignments, updates, and other alerts',
+    importance: Notifications.AndroidImportance.DEFAULT,
+    vibrationPattern: [0, 100],
+    lightColor: '#0ea5e9',
+    enableVibrate: true,
+    sound: 'default',
+  });
+
   // Collaboration notifications (comments, mentions)
   await Notifications.setNotificationChannelAsync(NOTIFICATION_CHANNELS.COLLABORATION, {
     name: 'Collaboration',
@@ -107,6 +152,42 @@ export async function setupNotificationChannels(): Promise<void> {
 /**
  * Request notification permissions
  */
+/**
+ * Notification permission as the app needs to reason about it (TC-MOB-050).
+ *
+ * `undetermined` and `denied` are very different situations and were
+ * previously collapsed into one boolean: the first can still be asked, the
+ * second cannot — on iOS the system prompt is offered exactly once, and after
+ * a refusal the only route back is the device's own settings.
+ */
+export type NotificationPermissionStatus =
+  | 'granted'
+  | 'denied'
+  | 'undetermined'
+  | 'unavailable';
+
+/**
+ * Read the current permission WITHOUT prompting.
+ *
+ * Lets the UI show what is actually true — settings can stop claiming push is
+ * on when the OS is refusing it — and lets the primer be shown only when the
+ * prompt is still available.
+ */
+export async function getNotificationPermissionStatus(): Promise<NotificationPermissionStatus> {
+  if (!Notifications || (!Device.isDevice && !allowEmulatorPush)) {
+    return 'unavailable';
+  }
+
+  try {
+    const { status, canAskAgain } = await Notifications.getPermissionsAsync();
+    if (status === 'granted') return 'granted';
+    if (status === 'undetermined' || canAskAgain) return 'undetermined';
+    return 'denied';
+  } catch {
+    return 'unavailable';
+  }
+}
+
 export async function requestNotificationPermissions(): Promise<boolean> {
   if (!Notifications || (!Device.isDevice && !allowEmulatorPush)) {
     console.warn('Push notifications require a physical device and a development build');
@@ -121,6 +202,11 @@ export async function requestNotificationPermissions(): Promise<boolean> {
 
   const { status } = await Notifications.requestPermissionsAsync();
   return status === 'granted';
+}
+
+/** Open this app's page in the device's own settings, for a denied permission. */
+export async function openDeviceNotificationSettings(): Promise<void> {
+  await Linking.openSettings();
 }
 
 /**
@@ -171,40 +257,67 @@ export async function getNativePushToken(): Promise<string | null> {
 /**
  * Register push token with backend
  */
-export async function registerPushToken(): Promise<boolean> {
+export type PushRegistrationResult =
+  | 'registered'
+  /** The OS refused. Retrying cannot help; only device settings can. */
+  | 'permission-denied'
+  /** Simulator, Expo Go, or no Play services. Retrying cannot help either. */
+  | 'unavailable'
+  /** Something transient — offline, a 5xx. Worth retrying. */
+  | 'failed';
+
+/**
+ * Register this device's push token with the backend.
+ *
+ * Returns a reason rather than a bare boolean so callers can tell a refusal
+ * apart from a network blip: the old boolean made `registerPushTokenWithRetry`
+ * re-attempt a denied permission three times, which cannot succeed and which
+ * on Android can burn the user's remaining prompt (TC-MOB-050).
+ */
+export async function registerPushToken(): Promise<PushRegistrationResult> {
+  const status = await getNotificationPermissionStatus();
+  if (status === 'unavailable') return 'unavailable';
+  if (status === 'denied') return 'permission-denied';
+
   try {
     const token = await getNativePushToken();
     if (!token) {
-      return false;
+      // Permission was available a moment ago, so re-read it: the user may
+      // have just refused the prompt getNativePushToken raised.
+      const after = await getNotificationPermissionStatus();
+      return after === 'granted' ? 'failed' : 'permission-denied';
     }
 
     // Check if we already registered this token
     const existingToken = await getPushToken();
     if (existingToken === token) {
       console.log('Push token already registered');
-      return true;
+      return 'registered';
     }
 
-    // Get device identifier
-    const deviceId = Device.modelId || Device.osInternalBuildId || 'unknown';
-    const deviceName = Device.deviceName || undefined;
-
-    // Register with backend
+    // Register with backend. The API takes a `deviceInfo` map; the flat
+    // deviceId/deviceName sent before bound to nothing and every token row
+    // stored an empty object, so a user's devices were indistinguishable.
     await notificationsApi.registerPushToken({
       token,
       platform: Platform.OS as 'ios' | 'android',
-      deviceId,
-      deviceName,
+      deviceInfo: {
+        deviceId: Device.modelId || Device.osInternalBuildId || 'unknown',
+        deviceName: Device.deviceName || undefined,
+        model: Device.modelName || undefined,
+        os: `${Platform.OS} ${Device.osVersion ?? ''}`.trim(),
+        appVersion: formatVersion(getAppInfo()),
+      },
     });
 
     // Store token locally
     await setPushToken(token);
 
     console.log('Push token registered successfully');
-    return true;
+    return 'registered';
   } catch (error) {
     console.error('Error registering push token:', error);
-    return false;
+    return 'failed';
   }
 }
 
@@ -214,16 +327,23 @@ export async function registerPushToken(): Promise<boolean> {
  * push until the next cold start (audit MO-06). Returns true on success or if
  * the token was already registered.
  */
-export async function registerPushTokenWithRetry(maxAttempts = 3): Promise<boolean> {
+export async function registerPushTokenWithRetry(
+  maxAttempts = 3
+): Promise<PushRegistrationResult> {
   for (let attempt = 1; attempt <= maxAttempts; attempt++) {
-    const ok = await registerPushToken();
-    if (ok) return true;
+    const result = await registerPushToken();
+
+    // Only a transient failure is worth another attempt. A refusal or an
+    // unsupported device will return the same answer however many times it is
+    // asked, and asking again wastes the user's prompts.
+    if (result !== 'failed') return result;
+
     if (attempt < maxAttempts) {
       await new Promise((resolve) => setTimeout(resolve, attempt * 2000));
     }
   }
   console.warn('Push token registration failed after retries');
-  return false;
+  return 'failed';
 }
 
 /**
@@ -233,10 +353,37 @@ export async function registerPushTokenWithRetry(maxAttempts = 3): Promise<boole
  */
 export function addPushTokenRotationListener(): NotificationsTypes.Subscription {
   if (!Notifications) return noopSubscription;
-  return Notifications.addPushTokenListener(() => {
-    console.log('Push token rotated; re-registering');
-    registerPushTokenWithRetry();
-  });
+
+  const subscriptions: { remove: () => void }[] = [
+    Notifications.addPushTokenListener(() => {
+      console.log('Device push token rotated; re-registering');
+      registerPushTokenWithRetry();
+    }),
+  ];
+
+  // addPushTokenListener reports the DEVICE token, which on iOS is the APNs
+  // token — but getNativePushToken registers the FCM token there, and Firebase
+  // rotates the two independently. An FCM-only rotation (app reinstall, data
+  // restore, token expiry) therefore never fires the listener above, leaving a
+  // stale token on the backend and silently killing push. Subscribe to
+  // Firebase's own refresh event to cover that case.
+  if (Platform.OS === 'ios') {
+    try {
+      // eslint-disable-next-line @typescript-eslint/no-require-imports
+      const messaging = require('@react-native-firebase/messaging').default;
+      const unsubscribe = messaging().onTokenRefresh(() => {
+        console.log('FCM token refreshed; re-registering');
+        registerPushTokenWithRetry();
+      });
+      subscriptions.push({ remove: unsubscribe });
+    } catch {
+      // Native module absent (Expo Go). The APNs listener above is all we get.
+    }
+  }
+
+  return {
+    remove: () => subscriptions.forEach((subscription) => subscription.remove()),
+  } as NotificationsTypes.Subscription;
 }
 
 /**
@@ -347,7 +494,7 @@ export function getNotificationChannel(type: string, priority: string): string {
       return NOTIFICATION_CHANNELS.COLLABORATION;
 
     default:
-      return NOTIFICATION_CHANNELS.TASKS;
+      return NOTIFICATION_CHANNELS.DEFAULT;
   }
 }
 
@@ -381,6 +528,87 @@ export async function scheduleLocalNotification(
   });
 
   return identifier;
+}
+
+/**
+ * Schedule a local notification for a specific moment (TC-MOB-048).
+ *
+ * `scheduleLocalNotification` above only takes an interval in seconds, so it
+ * cannot express "09:00 on the 15th". This uses a DATE trigger instead.
+ *
+ * Returns '' when nothing was scheduled — in Expo Go, where the notifications
+ * module is unavailable, or for a time already past (expo fires a past DATE
+ * trigger immediately, which would alert the user the moment they save).
+ */
+export async function scheduleNotificationAt(
+  fireAt: Date,
+  title: string,
+  body: string,
+  data?: NotificationData
+): Promise<string> {
+  if (!Notifications) return '';
+  if (fireAt.getTime() <= Date.now()) return '';
+
+  const granted = await requestNotificationPermissions();
+  if (!granted) return '';
+
+  const channelId = data?.type
+    ? getNotificationChannel(data.type as string, (data.priority as string) || 'medium')
+    : NOTIFICATION_CHANNELS.TASKS;
+
+  return Notifications.scheduleNotificationAsync({
+    content: {
+      title,
+      body,
+      data: data as Record<string, unknown>,
+      sound: true,
+      ...(Platform.OS === 'android' && { channelId }),
+    },
+    trigger: {
+      type: Notifications.SchedulableTriggerInputTypes.DATE,
+      date: fireAt,
+    },
+  });
+}
+
+export interface ScheduledReminder {
+  identifier: string;
+  title: string;
+  body: string;
+  /** When it will fire, or undefined for a trigger with no readable date. */
+  fireAt?: Date;
+  taskId?: string;
+}
+
+/**
+ * Everything currently queued with the OS (TC-MOB-048).
+ *
+ * Reads the system's own scheduling list rather than the app's bookkeeping, so
+ * it answers "will this actually fire?" and not merely "did we think we set
+ * it?". Empty in Expo Go, where nothing can be scheduled at all.
+ */
+export async function getScheduledReminders(): Promise<ScheduledReminder[]> {
+  if (!Notifications) return [];
+
+  const scheduled = await Notifications.getAllScheduledNotificationsAsync();
+
+  return scheduled
+    .map((entry) => {
+      const trigger = entry.trigger as { type?: string; date?: number | string } | null;
+      const raw = trigger?.date;
+      const fireAt = raw != null ? new Date(raw) : undefined;
+
+      return {
+        identifier: entry.identifier,
+        title: entry.content.title ?? 'Reminder',
+        body: entry.content.body ?? '',
+        fireAt: fireAt && !Number.isNaN(fireAt.getTime()) ? fireAt : undefined,
+        taskId: (entry.content.data as Record<string, unknown> | undefined)?.taskId as
+          | string
+          | undefined,
+      };
+    })
+    .sort((a, b) => (a.fireAt?.getTime() ?? 0) - (b.fireAt?.getTime() ?? 0));
 }
 
 /**

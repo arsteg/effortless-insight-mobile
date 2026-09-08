@@ -10,9 +10,15 @@ import { CreditCard, AlertCircle } from 'lucide-react-native';
 import { useCurrentSubscription } from '../../src/hooks';
 import { SubscriptionCard, UsageSummary } from '../../src/components/billing';
 import { LoadingSpinner, Button, EmptyState } from '../../src/components';
-import { COLORS, SPACING, FONT_SIZES, BORDER_RADIUS } from '../../src/utils/constants';
+import { SPACING, FONT_SIZES, BORDER_RADIUS } from '../../src/utils/constants';
+import { useColors, useThemedStyles } from '../../src/theme/useTheme';
+import type { Palette } from '../../src/theme/palettes';
+import { useTranslation } from '../../src/hooks';
 
 export default function BillingScreen() {
+  const { t } = useTranslation();
+  const styles = useThemedStyles(createStyles);
+  const COLORS = useColors();
   const router = useRouter();
   const {
     data,
@@ -41,8 +47,8 @@ export default function BillingScreen() {
         <EmptyState
           type="error"
           icon={<AlertCircle size={48} color={COLORS.error} />}
-          title="Failed to load subscription"
-          message="Please check your connection and try again."
+          title={t('billing.failedToLoadSubscription')}
+          message={t('billing.pleaseCheckYourConnectionAndTryAgain')}
           actionLabel="Retry"
           onAction={() => refetch()}
         />
@@ -66,12 +72,12 @@ export default function BillingScreen() {
           <View style={styles.iconContainer}>
             <CreditCard size={48} color={COLORS.primary} />
           </View>
-          <Text style={styles.noSubscriptionTitle}>No Active Subscription</Text>
+          <Text style={styles.noSubscriptionTitle}>{t('billing.noActiveSubscription')}</Text>
           <Text style={styles.noSubscriptionDescription}>
             Choose a plan to unlock all features and start managing your GST notices efficiently.
           </Text>
           <Button
-            title="View Plans"
+            title={t('billing.viewPlans')}
             onPress={handleChangePlan}
             variant="primary"
             fullWidth
@@ -92,7 +98,7 @@ export default function BillingScreen() {
     >
       {/* Current Subscription */}
       <View style={styles.section}>
-        <Text style={styles.sectionTitle}>Current Plan</Text>
+        <Text style={styles.sectionTitle}>{t('billing.currentPlan')}</Text>
         <SubscriptionCard
           subscription={subscription}
           onManage={handleManage}
@@ -132,7 +138,8 @@ function formatDate(dateString: string) {
   });
 }
 
-const styles = StyleSheet.create({
+const createStyles = (COLORS: Palette) =>
+  StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: COLORS.gray[50],

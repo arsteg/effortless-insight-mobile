@@ -4,7 +4,9 @@
 
 import React from 'react';
 import { View, ActivityIndicator, Text, StyleSheet } from 'react-native';
-import { COLORS, SPACING, FONT_SIZES } from '../../utils/constants';
+import { SPACING, FONT_SIZES } from '../../utils/constants';
+import { useColors, useThemedStyles } from '../../theme/useTheme';
+import type { Palette } from '../../theme/palettes';
 
 interface LoadingSpinnerProps {
   size?: 'small' | 'large';
@@ -15,13 +17,15 @@ interface LoadingSpinnerProps {
 
 export function LoadingSpinner({
   size = 'large',
-  color = COLORS.primary,
+  color,
   message,
   fullScreen = false,
 }: LoadingSpinnerProps) {
+  const styles = useThemedStyles(createStyles);
+  const COLORS = useColors();
   const content = (
     <View style={styles.container}>
-      <ActivityIndicator size={size} color={color} />
+      <ActivityIndicator size={size} color={color ?? COLORS.primary} />
       {message && <Text style={styles.message}>{message}</Text>}
     </View>
   );
@@ -33,7 +37,8 @@ export function LoadingSpinner({
   return content;
 }
 
-const styles = StyleSheet.create({
+const createStyles = (COLORS: Palette) =>
+  StyleSheet.create({
   fullScreen: {
     flex: 1,
     justifyContent: 'center',

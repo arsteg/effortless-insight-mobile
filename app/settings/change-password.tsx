@@ -18,9 +18,15 @@ import { Shield, CheckCircle } from 'lucide-react-native';
 import { useUIStore } from '../../src/stores';
 import { authApi } from '../../src/services/api';
 import { Button, PasswordInput } from '../../src/components/common';
-import { COLORS, SPACING, FONT_SIZES, BORDER_RADIUS } from '../../src/utils/constants';
+import { SPACING, FONT_SIZES, BORDER_RADIUS } from '../../src/utils/constants';
+import { useColors, useThemedStyles } from '../../src/theme/useTheme';
+import type { Palette } from '../../src/theme/palettes';
+import { useTranslation } from '../../src/hooks';
 
 export default function ChangePasswordScreen() {
+  const { t } = useTranslation();
+  const styles = useThemedStyles(createStyles);
+  const COLORS = useColors();
   const router = useRouter();
   const { showToast } = useUIStore();
 
@@ -118,7 +124,7 @@ export default function ChangePasswordScreen() {
             <View style={styles.iconContainer}>
               <Shield size={32} color={COLORS.primary} />
             </View>
-            <Text style={styles.headerTitle}>Update Your Password</Text>
+            <Text style={styles.headerTitle}>{t('settings.updateYourPassword')}</Text>
             <Text style={styles.headerSubtitle}>
               Choose a strong password that you haven't used before
             </Text>
@@ -127,7 +133,7 @@ export default function ChangePasswordScreen() {
           {/* Form */}
           <View style={styles.form}>
             <PasswordInput
-              label="Current Password"
+              label={t('settings.currentPassword')}
               value={currentPassword}
               onChangeText={(text) => {
                 setCurrentPassword(text);
@@ -135,12 +141,12 @@ export default function ChangePasswordScreen() {
                   setErrors((prev) => ({ ...prev, currentPassword: undefined }));
                 }
               }}
-              placeholder="Enter your current password"
+              placeholder={t('settings.enterYourCurrentPassword')}
               error={errors.currentPassword}
             />
 
             <PasswordInput
-              label="New Password"
+              label={t('settings.newPassword')}
               value={newPassword}
               onChangeText={(text) => {
                 setNewPassword(text);
@@ -148,14 +154,14 @@ export default function ChangePasswordScreen() {
                   setErrors((prev) => ({ ...prev, newPassword: undefined }));
                 }
               }}
-              placeholder="Enter your new password"
+              placeholder={t('settings.enterYourNewPassword')}
               error={errors.newPassword}
             />
 
             {/* Password Requirements */}
             {newPassword.length > 0 && (
               <View style={styles.requirements}>
-                <Text style={styles.requirementsTitle}>Password Requirements</Text>
+                <Text style={styles.requirementsTitle}>{t('settings.passwordRequirements')}</Text>
                 {passwordRequirements.map((req, index) => (
                   <View key={index} style={styles.requirementRow}>
                     <CheckCircle
@@ -176,7 +182,7 @@ export default function ChangePasswordScreen() {
             )}
 
             <PasswordInput
-              label="Confirm New Password"
+              label={t('settings.confirmNewPassword')}
               value={confirmPassword}
               onChangeText={(text) => {
                 setConfirmPassword(text);
@@ -184,7 +190,7 @@ export default function ChangePasswordScreen() {
                   setErrors((prev) => ({ ...prev, confirmPassword: undefined }));
                 }
               }}
-              placeholder="Confirm your new password"
+              placeholder={t('settings.confirmYourNewPassword')}
               error={errors.confirmPassword}
             />
           </View>
@@ -205,7 +211,8 @@ export default function ChangePasswordScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+const createStyles = (COLORS: Palette) =>
+  StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: COLORS.gray[50],

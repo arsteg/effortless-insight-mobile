@@ -25,7 +25,10 @@ import { format, formatDistanceToNow } from 'date-fns';
 
 import { useGstnSyncHistory } from '../../src/hooks/useGstn';
 import type { GstnSyncLogEntry } from '../../src/types';
-import { COLORS, SPACING, FONT_SIZES, BORDER_RADIUS } from '../../src/utils/constants';
+import { SPACING, FONT_SIZES, BORDER_RADIUS } from '../../src/utils/constants';
+import { useColors, useThemedStyles } from '../../src/theme/useTheme';
+import type { Palette } from '../../src/theme/palettes';
+import { useTranslation } from '../../src/hooks';
 
 /**
  * Format duration in human-readable form
@@ -62,6 +65,9 @@ function safeFormatDate(dateString: string, formatString: string): string {
 }
 
 export default function GstnHistoryScreen() {
+  const { t } = useTranslation();
+  const styles = useThemedStyles(createStyles);
+  const COLORS = useColors();
   const params = useLocalSearchParams<{
     gstinId: string;
     gstin: string;
@@ -76,7 +82,7 @@ export default function GstnHistoryScreen() {
   const renderEmpty = () => (
     <View style={styles.emptyContainer}>
       <RefreshCw size={48} color={COLORS.gray[300]} />
-      <Text style={styles.emptyTitle}>No Sync History</Text>
+      <Text style={styles.emptyTitle}>{t('settings.noSyncHistory')}</Text>
       <Text style={styles.emptyText}>
         Sync history will appear here after your first sync.
       </Text>
@@ -88,7 +94,6 @@ export default function GstnHistoryScreen() {
       <Stack.Screen
         options={{
           title: 'Sync History',
-          headerBackTitle: 'Settings',
         }}
       />
 
@@ -101,13 +106,13 @@ export default function GstnHistoryScreen() {
       {isLoading ? (
         <View style={styles.loadingContainer}>
           <ActivityIndicator size="large" color={COLORS.primary} />
-          <Text style={styles.loadingText}>Loading history...</Text>
+          <Text style={styles.loadingText}>{t('settings.loadingHistory')}</Text>
         </View>
       ) : isError ? (
         // A failed fetch must not look like "No Sync History" (audit B9).
         <View style={styles.emptyContainer}>
           <XCircle size={48} color={COLORS.error} />
-          <Text style={styles.emptyTitle}>Couldn't load sync history</Text>
+          <Text style={styles.emptyTitle}>{t('settings.couldnTLoadSyncHistory')}</Text>
           <Text style={styles.emptyText}>
             Please check your connection and try again.
           </Text>
@@ -115,7 +120,7 @@ export default function GstnHistoryScreen() {
             onPress={() => refetch()}
             style={{ marginTop: 16, paddingHorizontal: 24, paddingVertical: 10, backgroundColor: COLORS.primary, borderRadius: 8 }}
           >
-            <Text style={{ color: COLORS.white, fontWeight: '600' }}>Retry</Text>
+            <Text style={{ color: COLORS.white, fontWeight: '600' }}>{t('settings.retry')}</Text>
           </TouchableOpacity>
         </View>
       ) : (
@@ -136,6 +141,9 @@ export default function GstnHistoryScreen() {
 }
 
 function SyncLogCard({ log }: { log: GstnSyncLogEntry }) {
+  const { t } = useTranslation();
+  const styles = useThemedStyles(createStyles);
+  const COLORS = useColors();
   const isSuccess = log.status === 'completed';
   const isFailed = log.status === 'failed';
   const isPartial = log.status === 'partial';
@@ -200,24 +208,24 @@ function SyncLogCard({ log }: { log: GstnSyncLogEntry }) {
       <View style={styles.statsRow} accessibilityRole="none" accessibilityLabel="Sync statistics">
         <View style={styles.stat}>
           <Text style={styles.statValue}>{log.noticesFound ?? 0}</Text>
-          <Text style={styles.statLabel}>Found</Text>
+          <Text style={styles.statLabel}>{t('settings.found')}</Text>
         </View>
         <View style={styles.stat}>
           <Text style={[styles.statValue, { color: COLORS.success }]}>
             {log.noticesImported ?? 0}
           </Text>
-          <Text style={styles.statLabel}>Imported</Text>
+          <Text style={styles.statLabel}>{t('settings.imported')}</Text>
         </View>
         <View style={styles.stat}>
           <Text style={styles.statValue}>{log.noticesSkipped ?? 0}</Text>
-          <Text style={styles.statLabel}>Skipped</Text>
+          <Text style={styles.statLabel}>{t('settings.skipped')}</Text>
         </View>
         {(log.noticesFailed ?? 0) > 0 && (
           <View style={styles.stat}>
             <Text style={[styles.statValue, { color: COLORS.error }]}>
               {log.noticesFailed}
             </Text>
-            <Text style={styles.statLabel}>Failed</Text>
+            <Text style={styles.statLabel}>{t('settings.failed')}</Text>
           </View>
         )}
       </View>
@@ -255,7 +263,8 @@ function SyncLogCard({ log }: { log: GstnSyncLogEntry }) {
   );
 }
 
-const styles = StyleSheet.create({
+const createStyles = (COLORS: Palette) =>
+  StyleSheet.create({
   header: {
     backgroundColor: COLORS.white,
     padding: SPACING.md,

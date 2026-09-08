@@ -8,16 +8,21 @@
 import React from 'react';
 import { View, Text, TouchableOpacity, StyleSheet, SafeAreaView, Platform } from 'react-native';
 import { useUIStore } from '../../stores';
-import { COLORS, SPACING, FONT_SIZES, BORDER_RADIUS } from '../../utils/constants';
+import { SPACING, FONT_SIZES, BORDER_RADIUS } from '../../utils/constants';
+import { useColors, useThemedStyles } from '../../theme/useTheme';
+import type { Palette } from '../../theme/palettes';
 
-const TYPE_COLOR: Record<string, string> = {
+/** Built from the active palette rather than captured at module load. */
+const typeColor = (COLORS: Palette): Record<string, string> => ({
   success: COLORS.success,
   error: COLORS.error,
   warning: COLORS.warning,
   info: COLORS.primary,
-};
+});
 
 export function ToastContainer() {
+  const styles = useThemedStyles(createStyles);
+  const COLORS = useColors();
   const toasts = useUIStore((state) => state.toasts);
   const hideToast = useUIStore((state) => state.hideToast);
 
@@ -31,9 +36,31 @@ export function ToastContainer() {
             key={toast.id}
             activeOpacity={0.9}
             onPress={() => hideToast(toast.id)}
-            style={[styles.toast, { backgroundColor: TYPE_COLOR[toast.type] ?? COLORS.primary }]}
+            style={[styles.toast, { backgroundColor: typeColor(COLORS)[toast.type] ?? COLORS.primary }]}
           >
-            <Text style={styles.text}>{toast.message}</Text>
+            <View style={styles.row}>
+              <Text style={[styles.text, toast.action && styles.textWithAction]}>
+                {toast.message}
+              </Text>
+
+              {/*
+                The action lives inside the toast rather than replacing the
+                dismiss-on-tap, so an undo is one tap and dismissing still
+                works everywhere else on the surface.
+              */}
+              {toast.action && (
+                <TouchableOpacity
+                  onPress={() => {
+                    hideToast(toast.id);
+                    toast.action?.onPress();
+                  }}
+                  accessibilityRole="button"
+                  hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                >
+                  <Text style={styles.actionText}>{toast.action.label}</Text>
+                </TouchableOpacity>
+              )}
+            </View>
           </TouchableOpacity>
         ))}
       </View>
@@ -41,7 +68,8 @@ export function ToastContainer() {
   );
 }
 
-const styles = StyleSheet.create({
+const createStyles = (COLORS: Palette) =>
+  StyleSheet.create({
   wrap: {
     position: 'absolute',
     left: 0,
@@ -64,10 +92,27 @@ const styles = StyleSheet.create({
     shadowRadius: 4,
     elevation: 4,
   },
+  row: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: SPACING.md,
+  },
   text: {
     color: COLORS.white,
     fontSize: FONT_SIZES.sm,
     fontWeight: '500',
     textAlign: 'center',
+  },
+  textWithAction: {
+    flex: 1,
+    textAlign: 'left',
+  },
+  actionText: {
+    color: COLORS.white,
+    fontSize: FONT_SIZES.sm,
+    fontWeight: '700',
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
   },
 });

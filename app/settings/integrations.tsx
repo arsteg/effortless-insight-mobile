@@ -19,7 +19,10 @@ import { formatDistanceToNow } from 'date-fns';
 
 import { useGstnConnections, useInitiateConnection, useTriggerSync } from '../../src/hooks/useGstn';
 import { GstnConnection, GstnConnectionStatus, getStatusLabel, canConnect, canSync } from '../../src/types';
-import { COLORS, SPACING, FONT_SIZES, BORDER_RADIUS } from '../../src/utils/constants';
+import { SPACING, FONT_SIZES, BORDER_RADIUS } from '../../src/utils/constants';
+import { useColors, useThemedStyles } from '../../src/theme/useTheme';
+import type { Palette } from '../../src/theme/palettes';
+import { useTranslation } from '../../src/hooks';
 
 // Sanitize error messages to prevent XSS/injection
 function sanitizeErrorMessage(message: string): string {
@@ -30,6 +33,9 @@ function sanitizeErrorMessage(message: string): string {
 }
 
 export default function IntegrationsScreen() {
+  const { t } = useTranslation();
+  const styles = useThemedStyles(createStyles);
+  const COLORS = useColors();
   const router = useRouter();
   const { data, isLoading, error, refetch, isRefetching } = useGstnConnections();
   const initiateConnection = useInitiateConnection();
@@ -115,7 +121,7 @@ export default function IntegrationsScreen() {
         <View style={styles.infoCard}>
           <View style={styles.infoHeader}>
             <Zap size={20} color={COLORS.primary} />
-            <Text style={styles.infoTitle}>Auto-Fetch Notices</Text>
+            <Text style={styles.infoTitle}>{t('settings.autoFetchNotices')}</Text>
           </View>
           <Text style={styles.infoText}>
             Connect your GSTINs to automatically fetch notices from the GST Portal.
@@ -127,20 +133,20 @@ export default function IntegrationsScreen() {
         {isLoading ? (
           <View style={styles.loadingContainer}>
             <ActivityIndicator size="large" color={COLORS.primary} />
-            <Text style={styles.loadingText}>Loading connections...</Text>
+            <Text style={styles.loadingText}>{t('settings.loadingConnections')}</Text>
           </View>
         ) : error ? (
           <View style={styles.errorContainer}>
             <AlertCircle size={40} color={COLORS.error} />
-            <Text style={styles.errorText}>Failed to load connections</Text>
+            <Text style={styles.errorText}>{t('settings.failedToLoadConnections')}</Text>
             <TouchableOpacity style={styles.retryButton} onPress={() => refetch()}>
-              <Text style={styles.retryButtonText}>Retry</Text>
+              <Text style={styles.retryButtonText}>{t('settings.retry')}</Text>
             </TouchableOpacity>
           </View>
         ) : data?.connections.length === 0 ? (
           <View style={styles.emptyContainer}>
             <Link2 size={40} color={COLORS.gray[400]} />
-            <Text style={styles.emptyText}>No GSTINs found</Text>
+            <Text style={styles.emptyText}>{t('settings.noGstinsFound')}</Text>
             <Text style={styles.emptySubtext}>
               Add GSTINs to your organization first
             </Text>
@@ -192,6 +198,9 @@ function ConnectionCard({
   isSyncing,
   getStatusColor,
 }: ConnectionCardProps) {
+  const { t } = useTranslation();
+  const styles = useThemedStyles(createStyles);
+  const COLORS = useColors();
   return (
     <View style={styles.card}>
       <View style={styles.cardHeader}>
@@ -217,7 +226,7 @@ function ConnectionCard({
         <>
           {/* Connection Info */}
           <View style={styles.infoRow}>
-            <Text style={styles.infoLabel}>Auto-sync</Text>
+            <Text style={styles.infoLabel}>{t('settings.autoSync')}</Text>
             <Text style={styles.infoValue}>
               {connection.autoSyncEnabled
                 ? `Every ${connection.syncIntervalHours}h`
@@ -227,7 +236,7 @@ function ConnectionCard({
 
           {connection.lastSyncAt && (
             <View style={styles.infoRow}>
-              <Text style={styles.infoLabel}>Last synced</Text>
+              <Text style={styles.infoLabel}>{t('settings.lastSynced')}</Text>
               <Text style={styles.infoValue}>
                 {formatDistanceToNow(new Date(connection.lastSyncAt), { addSuffix: true })}
               </Text>
@@ -255,7 +264,7 @@ function ConnectionCard({
               ) : (
                 <RefreshCw size={18} color={COLORS.primary} />
               )}
-              <Text style={styles.actionButtonText}>Sync</Text>
+              <Text style={styles.actionButtonText}>{t('settings.sync')}</Text>
             </TouchableOpacity>
 
             <TouchableOpacity style={styles.actionButton} onPress={onSettings}>
@@ -293,7 +302,7 @@ function ConnectionCard({
             ) : (
               <>
                 <Link2 size={18} color={COLORS.white} />
-                <Text style={styles.connectButtonText}>Connect to GST Portal</Text>
+                <Text style={styles.connectButtonText}>{t('settings.connectToGstPortal')}</Text>
               </>
             )}
           </TouchableOpacity>
@@ -303,7 +312,8 @@ function ConnectionCard({
   );
 }
 
-const styles = StyleSheet.create({
+const createStyles = (COLORS: Palette) =>
+  StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: COLORS.gray[100],

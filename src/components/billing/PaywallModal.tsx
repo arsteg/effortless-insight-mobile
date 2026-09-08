@@ -13,9 +13,11 @@ import {
   TouchableWithoutFeedback,
 } from 'react-native';
 import { AlertTriangle, X, ArrowUpRight } from 'lucide-react-native';
-import { COLORS, SPACING, FONT_SIZES, BORDER_RADIUS } from '../../utils/constants';
+import { SPACING, FONT_SIZES, BORDER_RADIUS } from '../../utils/constants';
 import { PaywallState } from '../../types';
 import { Button } from '../common';
+import { useColors, useThemedStyles } from '../../theme/useTheme';
+import type { Palette } from '../../theme/palettes';
 
 interface PaywallModalProps {
   visible: boolean;
@@ -25,6 +27,8 @@ interface PaywallModalProps {
 }
 
 export function PaywallModal({ visible, paywall, onClose, onUpgrade }: PaywallModalProps) {
+  const styles = useThemedStyles(createStyles);
+  const COLORS = useColors();
   if (!paywall) return null;
 
   const getActionLabel = () => {
@@ -128,7 +132,8 @@ export function PaywallModal({ visible, paywall, onClose, onUpgrade }: PaywallMo
   );
 }
 
-const styles = StyleSheet.create({
+const createStyles = (COLORS: Palette) =>
+  StyleSheet.create({
   overlay: {
     flex: 1,
     backgroundColor: 'rgba(0, 0, 0, 0.5)',

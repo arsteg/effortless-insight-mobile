@@ -32,12 +32,10 @@ import {
 import { useAuthStore, useUIStore } from '../../src/stores';
 import { organizationsApi } from '../../src/services/api';
 import { Button } from '../../src/components';
-import {
-  COLORS,
-  SPACING,
-  FONT_SIZES,
-  BORDER_RADIUS,
-} from '../../src/utils/constants';
+import { SPACING, FONT_SIZES, BORDER_RADIUS } from '../../src/utils/constants';
+import { useColors, useThemedStyles } from '../../src/theme/useTheme';
+import type { Palette } from '../../src/theme/palettes';
+import { useTranslation } from '../../src/hooks';
 import {
   INDIAN_STATES,
   INDUSTRY_OPTIONS,
@@ -67,6 +65,9 @@ const organizationSchema = z.object({
 type OrganizationFormData = z.infer<typeof organizationSchema>;
 
 export default function OrganizationScreen() {
+  const { t } = useTranslation();
+  const styles = useThemedStyles(createStyles);
+  const COLORS = useColors();
   const router = useRouter();
   const { completeOnboarding, isLoading } = useAuthStore();
   const { showToast } = useUIStore();
@@ -158,9 +159,9 @@ export default function OrganizationScreen() {
 
       // Handle specific errors
       if (message.includes('GSTIN_EXISTS')) {
-        Alert.alert('GSTIN Already Registered', 'This GSTIN is already registered with another organization.');
+        Alert.alert(t('onboarding.gstinAlreadyRegistered'), t('onboarding.thisGstinIsAlreadyRegisteredWithAnotherO'));
       } else if (message.includes('ORG_NAME_EXISTS')) {
-        Alert.alert('Name Already Taken', 'An organization with this name already exists.');
+        Alert.alert(t('onboarding.nameAlreadyTaken'), t('onboarding.anOrganizationWithThisNameAlreadyExists'));
       } else {
         showToast('error', message);
       }
@@ -191,7 +192,7 @@ export default function OrganizationScreen() {
       >
         {/* Header */}
         <View style={styles.header}>
-          <Text style={styles.title}>Organization Details</Text>
+          <Text style={styles.title}>{t('onboarding.organizationDetails')}</Text>
           <Text style={styles.subtitle}>
             Enter your business information to get started
           </Text>
@@ -201,7 +202,7 @@ export default function OrganizationScreen() {
         <View style={styles.form}>
           {/* Organization Name */}
           <View style={styles.inputGroup}>
-            <Text style={styles.label}>Organization Name *</Text>
+            <Text style={styles.label}>{t('onboarding.organizationName')}</Text>
             <Controller
               control={control}
               name="name"
@@ -210,7 +211,7 @@ export default function OrganizationScreen() {
                   <Building2 size={20} color={COLORS.gray[400]} />
                   <TextInput
                     style={styles.input}
-                    placeholder="Your Company Name"
+                    placeholder={t('onboarding.yourCompanyName')}
                     placeholderTextColor={COLORS.gray[400]}
                     value={value}
                     onChangeText={onChange}
@@ -281,7 +282,7 @@ export default function OrganizationScreen() {
 
           {/* State */}
           <View style={styles.inputGroup}>
-            <Text style={styles.label}>State *</Text>
+            <Text style={styles.label}>{t('onboarding.state')}</Text>
             <Controller
               control={control}
               name="state"
@@ -307,7 +308,7 @@ export default function OrganizationScreen() {
 
           {/* City */}
           <View style={styles.inputGroup}>
-            <Text style={styles.label}>City</Text>
+            <Text style={styles.label}>{t('onboarding.city')}</Text>
             <Controller
               control={control}
               name="city"
@@ -316,7 +317,7 @@ export default function OrganizationScreen() {
                   <MapPin size={20} color={COLORS.gray[400]} />
                   <TextInput
                     style={styles.input}
-                    placeholder="City (Optional)"
+                    placeholder={t('onboarding.cityOptional')}
                     placeholderTextColor={COLORS.gray[400]}
                     value={value}
                     onChangeText={onChange}
@@ -330,7 +331,7 @@ export default function OrganizationScreen() {
 
           {/* Industry */}
           <View style={styles.inputGroup}>
-            <Text style={styles.label}>Industry</Text>
+            <Text style={styles.label}>{t('onboarding.industry')}</Text>
             <Controller
               control={control}
               name="industry"
@@ -353,7 +354,7 @@ export default function OrganizationScreen() {
 
           {/* Annual Turnover */}
           <View style={styles.inputGroup}>
-            <Text style={styles.label}>Annual Turnover</Text>
+            <Text style={styles.label}>{t('onboarding.annualTurnover')}</Text>
             <Controller
               control={control}
               name="annualTurnoverRange"
@@ -391,7 +392,7 @@ export default function OrganizationScreen() {
       {/* State Picker Modal */}
       {showStatePicker && (
         <PickerModal
-          title="Select State"
+          title={t('onboarding.selectState')}
           options={INDIAN_STATES}
           value={watch('state')}
           onSelect={(value) => {
@@ -405,7 +406,7 @@ export default function OrganizationScreen() {
       {/* Industry Picker Modal */}
       {showIndustryPicker && (
         <PickerModal
-          title="Select Industry"
+          title={t('onboarding.selectIndustry')}
           options={INDUSTRY_OPTIONS as any}
           value={watch('industry') || ''}
           onSelect={(value) => {
@@ -419,7 +420,7 @@ export default function OrganizationScreen() {
       {/* Turnover Picker Modal */}
       {showTurnoverPicker && (
         <PickerModal
-          title="Select Annual Turnover"
+          title={t('onboarding.selectAnnualTurnover')}
           options={TURNOVER_OPTIONS as any}
           value={watch('annualTurnoverRange') || ''}
           onSelect={(value) => {
@@ -447,6 +448,8 @@ function PickerModal({
   onSelect: (value: string) => void;
   onClose: () => void;
 }) {
+  const pickerStyles = useThemedStyles(createPickerStyles);
+  const COLORS = useColors();
   return (
     <View style={pickerStyles.overlay}>
       <TouchableOpacity style={pickerStyles.backdrop} onPress={onClose} />
@@ -486,7 +489,8 @@ function PickerModal({
   );
 }
 
-const styles = StyleSheet.create({
+const createStyles = (COLORS: Palette) =>
+  StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: COLORS.white,
@@ -566,7 +570,8 @@ const styles = StyleSheet.create({
   },
 });
 
-const pickerStyles = StyleSheet.create({
+const createPickerStyles = (COLORS: Palette) =>
+  StyleSheet.create({
   overlay: {
     position: 'absolute',
     top: 0,

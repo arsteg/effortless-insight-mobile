@@ -16,7 +16,10 @@ import { useRouter } from 'expo-router';
 import { Building2, FileCheck, Bell, Shield } from 'lucide-react-native';
 import { useAuthStore } from '../../src/stores';
 import { Button } from '../../src/components';
-import { COLORS, SPACING, FONT_SIZES, BORDER_RADIUS } from '../../src/utils/constants';
+import { SPACING, FONT_SIZES, BORDER_RADIUS } from '../../src/utils/constants';
+import { useColors, useThemedStyles } from '../../src/theme/useTheme';
+import type { Palette } from '../../src/theme/palettes';
+import { useTranslation } from '../../src/hooks';
 
 const features = [
   {
@@ -37,6 +40,9 @@ const features = [
 ];
 
 export default function WelcomeScreen() {
+  const { t } = useTranslation();
+  const styles = useThemedStyles(createStyles);
+  const COLORS = useColors();
   const router = useRouter();
   const { user } = useAuthStore();
 
@@ -58,7 +64,7 @@ export default function WelcomeScreen() {
           <Text style={styles.greeting}>
             Welcome{user?.name ? `, ${user.name.split(' ')[0]}` : ''}!
           </Text>
-          <Text style={styles.title}>Let's set up your organization</Text>
+          <Text style={styles.title}>{t('onboarding.letSSetUpYourOrganization')}</Text>
           <Text style={styles.subtitle}>
             Create your organization to start managing GST notices efficiently
           </Text>
@@ -81,7 +87,7 @@ export default function WelcomeScreen() {
 
         {/* Trial Info */}
         <View style={styles.trialInfo}>
-          <Text style={styles.trialTitle}>Start your 14-day free trial</Text>
+          <Text style={styles.trialTitle}>{t('onboarding.startYour14DayFreeTrial')}</Text>
           <Text style={styles.trialDescription}>
             No credit card required. Full access to all features.
           </Text>
@@ -91,7 +97,7 @@ export default function WelcomeScreen() {
       {/* Bottom CTA */}
       <View style={styles.bottomContainer}>
         <Button
-          title="Get Started"
+          title={t('onboarding.getStarted')}
           onPress={handleGetStarted}
           variant="primary"
           fullWidth
@@ -101,7 +107,8 @@ export default function WelcomeScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+const createStyles = (COLORS: Palette) =>
+  StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: COLORS.white,

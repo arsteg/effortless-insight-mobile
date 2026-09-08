@@ -38,8 +38,11 @@ import {
   useDeleteNotification,
 } from '../../src/hooks/useNotifications';
 import { navigateForNotificationData } from '../../src/services/pushNotifications';
-import { COLORS, SPACING, FONT_SIZES, BORDER_RADIUS } from '../../src/utils/constants';
+import { SPACING, FONT_SIZES, BORDER_RADIUS } from '../../src/utils/constants';
 import type { NotificationDto, NotificationType } from '../../src/types/notification';
+import { useColors, useThemedStyles } from '../../src/theme/useTheme';
+import type { Palette } from '../../src/theme/palettes';
+import { useTranslation } from '../../src/hooks';
 
 // Notification type icons
 const TYPE_ICONS: Record<string, React.ComponentType<{ color: string; size: number }>> = {
@@ -60,13 +63,13 @@ const TYPE_ICONS: Record<string, React.ComponentType<{ color: string; size: numb
   default: Bell,
 };
 
-// Priority colors
-const PRIORITY_COLORS = {
+// Priority colours, built from the active palette rather than captured once.
+const priorityColors = (COLORS: Palette) => ({
   critical: COLORS.error,
   high: '#f97316',
   medium: COLORS.warning,
   low: COLORS.gray[400],
-};
+});
 
 // Tab options
 type TabFilter = 'all' | 'unread';
@@ -79,8 +82,11 @@ interface NotificationItemProps {
 }
 
 function NotificationItem({ notification, onPress, onMarkRead, onDelete }: NotificationItemProps) {
+  const { t } = useTranslation();
+  const styles = useThemedStyles(createStyles);
+  const COLORS = useColors();
   const IconComponent = TYPE_ICONS[notification.type] || TYPE_ICONS.default;
-  const priorityColor = PRIORITY_COLORS[notification.priority] || COLORS.gray[400];
+  const priorityColor = priorityColors(COLORS)[notification.priority] || COLORS.gray[400];
 
   const renderRightActions = () => (
     <View style={styles.swipeActions}>
@@ -90,7 +96,7 @@ function NotificationItem({ notification, onPress, onMarkRead, onDelete }: Notif
           onPress={() => onMarkRead(notification.id)}
         >
           <Check color={COLORS.white} size={20} />
-          <Text style={styles.swipeActionText}>Read</Text>
+          <Text style={styles.swipeActionText}>{t('notifications.read')}</Text>
         </TouchableOpacity>
       )}
       <TouchableOpacity
@@ -98,7 +104,7 @@ function NotificationItem({ notification, onPress, onMarkRead, onDelete }: Notif
         onPress={() => onDelete(notification.id)}
       >
         <Trash2 color={COLORS.white} size={20} />
-        <Text style={styles.swipeActionText}>Delete</Text>
+        <Text style={styles.swipeActionText}>{t('notifications.delete')}</Text>
       </TouchableOpacity>
     </View>
   );
@@ -135,6 +141,8 @@ function NotificationItem({ notification, onPress, onMarkRead, onDelete }: Notif
 }
 
 function EmptyState({ filter }: { filter: TabFilter }) {
+  const styles = useThemedStyles(createStyles);
+  const COLORS = useColors();
   return (
     <View style={styles.emptyState}>
       <BellOff color={COLORS.gray[300]} size={64} />
@@ -151,6 +159,7 @@ function EmptyState({ filter }: { filter: TabFilter }) {
 }
 
 function NotificationSkeleton() {
+  const styles = useThemedStyles(createStyles);
   return (
     <View style={styles.skeletonContainer}>
       {[1, 2, 3, 4, 5].map((i) => (
@@ -168,6 +177,9 @@ function NotificationSkeleton() {
 }
 
 export default function NotificationsScreen() {
+  const { t } = useTranslation();
+  const styles = useThemedStyles(createStyles);
+  const COLORS = useColors();
   const [filter, setFilter] = useState<TabFilter>('all');
   const [refreshing, setRefreshing] = useState(false);
 
@@ -286,12 +298,12 @@ export default function NotificationsScreen() {
           }}
         />
         <View style={styles.errorContainer}>
-          <Text style={styles.errorTitle}>Couldn't load notifications</Text>
+          <Text style={styles.errorTitle}>{t('notifications.couldnTLoadNotifications')}</Text>
           <Text style={styles.errorMessage}>
             Something went wrong. Please check your connection and try again.
           </Text>
           <TouchableOpacity style={styles.errorRetry} onPress={() => refetch()}>
-            <Text style={styles.errorRetryText}>Retry</Text>
+            <Text style={styles.errorRetryText}>{t('notifications.retry')}</Text>
           </TouchableOpacity>
         </View>
       </View>
@@ -317,7 +329,7 @@ export default function NotificationsScreen() {
           style={[styles.tab, filter === 'all' && styles.tabActive]}
           onPress={() => setFilter('all')}
         >
-          <Text style={[styles.tabText, filter === 'all' && styles.tabTextActive]}>All</Text>
+          <Text style={[styles.tabText, filter === 'all' && styles.tabTextActive]}>{t('notifications.all')}</Text>
         </TouchableOpacity>
         <TouchableOpacity
           style={[styles.tab, filter === 'unread' && styles.tabActive]}
@@ -371,7 +383,8 @@ export default function NotificationsScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+const createStyles = (COLORS: Palette) =>
+  StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: COLORS.gray[50],

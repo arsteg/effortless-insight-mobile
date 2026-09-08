@@ -16,6 +16,9 @@ export default function OnboardingLayout() {
         headerTitleStyle: {
           fontWeight: '600',
         },
+        // Chevron only: iOS otherwise labels it with the previous route's
+        // title, or its route name when there is none.
+        headerBackButtonDisplayMode: 'minimal',
         headerShadowVisible: false,
         contentStyle: {
           backgroundColor: COLORS.white,
@@ -32,7 +35,6 @@ export default function OnboardingLayout() {
         name="organization"
         options={{
           title: 'Create Organization',
-          headerBackTitle: 'Back',
         }}
       />
       <Stack.Screen

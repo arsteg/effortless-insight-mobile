@@ -155,21 +155,29 @@ async function processAction(action: QueuedAction): Promise<void> {
 /**
  * Process all queued actions
  */
+/** True for a 409 — the record moved on while this action waited. */
+function isConflict(error: unknown): boolean {
+  const status = (error as { response?: { status?: number } })?.response?.status;
+  return status === 409;
+}
+
 export async function processQueue(): Promise<{
   processed: number;
   failed: number;
   remaining: number;
+  conflicts: number;
 }> {
   // Check connectivity first
   const netState = await NetInfo.fetch();
   if (!netState.isConnected) {
     const queue = await getQueue();
-    return { processed: 0, failed: 0, remaining: queue.length };
+    return { processed: 0, failed: 0, remaining: queue.length, conflicts: 0 };
   }
 
   const queue = await getQueue();
   let processed = 0;
   let failed = 0;
+  let conflicts = 0;
 
   for (const action of queue) {
     // Terminally failed: don't keep re-attempting every sync. It stays in the
@@ -193,6 +201,15 @@ export async function processQueue(): Promise<{
       await removeFromQueue(action.id);
       processed++;
     } catch (error) {
+      // A conflict is terminal, not transient: the server rejected this change
+      // because someone else edited the record. Retrying replays the same
+      // stale write, so it is dropped and reported instead (TC-MOB-059).
+      if (isConflict(error)) {
+        await removeFromQueue(action.id);
+        conflicts++;
+        continue;
+      }
+
       action.retries++;
       action.lastAttempt = Date.now();
       action.error = error instanceof Error ? error.message : 'Unknown error';
@@ -204,7 +221,7 @@ export async function processQueue(): Promise<{
   }
 
   const remaining = (await getQueue()).length;
-  return { processed, failed, remaining };
+  return { processed, failed, remaining, conflicts };
 }
 
 /**

@@ -17,7 +17,10 @@ import { Stack, useRouter, useLocalSearchParams } from 'expo-router';
 import { KeyRound, RefreshCw, CheckCircle, Clock } from 'lucide-react-native';
 
 import { useVerifyOtp, useResendOtp } from '../../src/hooks/useGstn';
-import { COLORS, SPACING, FONT_SIZES, BORDER_RADIUS } from '../../src/utils/constants';
+import { SPACING, FONT_SIZES, BORDER_RADIUS } from '../../src/utils/constants';
+import { useColors, useThemedStyles } from '../../src/theme/useTheme';
+import type { Palette } from '../../src/theme/palettes';
+import { useTranslation } from '../../src/hooks';
 
 // OTP expires in 5 minutes (300 seconds)
 const OTP_EXPIRY_SECONDS = 300;
@@ -32,6 +35,9 @@ function formatTime(seconds: number): string {
 }
 
 export default function GstnOtpScreen() {
+  const { t } = useTranslation();
+  const styles = useThemedStyles(createStyles);
+  const COLORS = useColors();
   const router = useRouter();
   const params = useLocalSearchParams<{
     gstinId: string;
@@ -144,7 +150,7 @@ export default function GstnOtpScreen() {
         <Stack.Screen options={{ title: 'Verification', headerBackVisible: false }} />
         <View style={styles.successContainer}>
           <CheckCircle size={80} color={COLORS.success} />
-          <Text style={styles.successTitle}>Connected!</Text>
+          <Text style={styles.successTitle}>{t('settings.connected')}</Text>
           <Text style={styles.successText}>
             Your GSTIN is now connected to the GST Portal
           </Text>
@@ -159,7 +165,7 @@ export default function GstnOtpScreen() {
 
       <KeyboardAvoidingView
         style={styles.container}
-        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
       >
         <View style={styles.content}>
           {/* Header */}
@@ -167,7 +173,7 @@ export default function GstnOtpScreen() {
             <View style={styles.iconContainer}>
               <KeyRound size={32} color={COLORS.primary} />
             </View>
-            <Text style={styles.title}>Enter Verification Code</Text>
+            <Text style={styles.title}>{t('settings.enterVerificationCode')}</Text>
             <Text style={styles.subtitle}>
               A 6-digit code has been sent to{'\n'}
               <Text style={styles.destination}>
@@ -236,7 +242,7 @@ export default function GstnOtpScreen() {
             {verifyOtp.isPending ? (
               <ActivityIndicator color={COLORS.white} />
             ) : (
-              <Text style={styles.verifyButtonText}>Verify</Text>
+              <Text style={styles.verifyButtonText}>{t('settings.verify')}</Text>
             )}
           </TouchableOpacity>
 
@@ -262,7 +268,7 @@ export default function GstnOtpScreen() {
 
           {/* GSTIN Info */}
           <View style={styles.gstinInfo}>
-            <Text style={styles.gstinLabel}>Connecting GSTIN</Text>
+            <Text style={styles.gstinLabel}>{t('settings.connectingGstin')}</Text>
             <Text style={styles.gstinValue}>{params.gstin}</Text>
           </View>
         </View>
@@ -271,7 +277,8 @@ export default function GstnOtpScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+const createStyles = (COLORS: Palette) =>
+  StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: COLORS.white,

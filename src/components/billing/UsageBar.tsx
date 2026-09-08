@@ -6,8 +6,10 @@
 import React from 'react';
 import { View, Text, StyleSheet } from 'react-native';
 import { FileText, Users, Database, Sparkles } from 'lucide-react-native';
-import { COLORS, SPACING, FONT_SIZES, BORDER_RADIUS } from '../../utils/constants';
+import { SPACING, FONT_SIZES, BORDER_RADIUS } from '../../utils/constants';
 import { UsageMetricDto, StorageUsageDto } from '../../types';
+import { useColors, useThemedStyles } from '../../theme/useTheme';
+import type { Palette } from '../../theme/palettes';
 
 interface UsageBarProps {
   used: number;
@@ -19,6 +21,8 @@ interface UsageBarProps {
 }
 
 export function UsageBar({ used, limit, percentage, label, type, suffix = '' }: UsageBarProps) {
+  const styles = useThemedStyles(createStyles);
+  const COLORS = useColors();
   const getIcon = () => {
     const size = 18;
     const color = COLORS.gray[400];
@@ -105,6 +109,7 @@ interface UsageSummaryProps {
 }
 
 export function UsageSummary({ notices, users, storage, apiCalls }: UsageSummaryProps) {
+  const styles = useThemedStyles(createStyles);
   return (
     <View style={styles.summaryContainer}>
       <Text style={styles.summaryTitle}>Usage This Period</Text>
@@ -145,7 +150,8 @@ export function UsageSummary({ notices, users, storage, apiCalls }: UsageSummary
   );
 }
 
-const styles = StyleSheet.create({
+const createStyles = (COLORS: Palette) =>
+  StyleSheet.create({
   container: {
     marginBottom: SPACING.md,
   },

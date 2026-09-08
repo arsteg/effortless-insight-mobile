@@ -6,8 +6,10 @@
 import React from 'react';
 import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
 import { CreditCard, Calendar, Users, ChevronRight, AlertCircle } from 'lucide-react-native';
-import { COLORS, SPACING, FONT_SIZES, BORDER_RADIUS } from '../../utils/constants';
+import { SPACING, FONT_SIZES, BORDER_RADIUS } from '../../utils/constants';
 import { SubscriptionDto } from '../../types';
+import { useColors, useThemedStyles } from '../../theme/useTheme';
+import type { Palette } from '../../theme/palettes';
 import {
   formatAmount,
   getBillingCycleLabel,
@@ -26,6 +28,8 @@ export function SubscriptionCard({
   onManage,
   onChangePlan,
 }: SubscriptionCardProps) {
+  const styles = useThemedStyles(createStyles);
+  const COLORS = useColors();
   const statusColor = getSubscriptionStatusColor(subscription.status);
   const statusLabel = getSubscriptionStatusLabel(subscription.status);
   const isTrialing = subscription.status === 'trialing';
@@ -155,7 +159,8 @@ export function SubscriptionCard({
   );
 }
 
-const styles = StyleSheet.create({
+const createStyles = (COLORS: Palette) =>
+  StyleSheet.create({
   container: {
     backgroundColor: COLORS.white,
     borderRadius: BORDER_RADIUS.lg,

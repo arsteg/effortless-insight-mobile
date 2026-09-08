@@ -98,3 +98,6 @@ ios/build/
 
 expo-env.d.ts
 # @end expo-cli
+# Firebase service-account key — a SERVER secret. Never ship it in the app.
+fcm-service-account.json
+*-service-account.json

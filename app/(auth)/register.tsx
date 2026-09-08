@@ -22,8 +22,11 @@ import { useAuthStore } from '../../src/stores';
 import { authApi, getApiErrorMessage } from '../../src/services/api';
 import { Button, Input } from '../../src/components/common';
 import { OAuthButtons } from '../../src/components/auth';
-import { setTokens, setUser } from '../../src/services/storage/secure';
-import { COLORS, SPACING, FONT_SIZES, BORDER_RADIUS } from '../../src/utils/constants';
+import { UserDto } from '../../src/types';
+import { SPACING, FONT_SIZES, BORDER_RADIUS } from '../../src/utils/constants';
+import { useColors, useThemedStyles } from '../../src/theme/useTheme';
+import type { Palette } from '../../src/theme/palettes';
+import { useTranslation } from '../../src/hooks';
 
 const registerSchema = z
   .object({
@@ -54,6 +57,9 @@ const registerSchema = z
 type RegisterFormData = z.infer<typeof registerSchema>;
 
 export default function RegisterScreen() {
+  const { t } = useTranslation();
+  const styles = useThemedStyles(createStyles);
+  const COLORS = useColors();
   const router = useRouter();
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -101,7 +107,7 @@ export default function RegisterScreen() {
   const handleOAuthSuccess = async (response: {
     accessToken: string;
     refreshToken: string;
-    user: any;
+    user?: UserDto;
     requires2fa?: boolean;
     partialToken?: string;
   }) => {
@@ -118,17 +124,11 @@ export default function RegisterScreen() {
         return;
       }
 
-      // Store tokens and user
-      await setTokens(response.accessToken, response.refreshToken);
-      await setUser(response.user);
-
-      // Update auth store
-      useAuthStore.setState({
-        isAuthenticated: true,
+      // The store owns token persistence, profile mapping and session state.
+      await useAuthStore.getState().completeOAuthLogin({
+        accessToken: response.accessToken,
+        refreshToken: response.refreshToken,
         user: response.user,
-        requires2fa: false,
-        partialToken: null,
-        needsOnboarding: !response.user?.organization?.id,
       });
 
       // Navigate to main app
@@ -150,13 +150,13 @@ export default function RegisterScreen() {
         <View style={styles.successIcon}>
           <Text style={styles.successIconText}>✓</Text>
         </View>
-        <Text style={styles.successTitle}>Registration Successful!</Text>
+        <Text style={styles.successTitle}>{t('auth.registrationSuccessful')}</Text>
         <Text style={styles.successMessage}>
           We've sent a verification email to your address. Please check your inbox and click the
           link to activate your account.
         </Text>
         <Button
-          title="Go to Login"
+          title={t('auth.goToLogin')}
           onPress={() => router.replace('/(auth)/login')}
           fullWidth
           size="lg"
@@ -168,7 +168,7 @@ export default function RegisterScreen() {
   return (
     <KeyboardAvoidingView
       style={styles.container}
-      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+      behavior={Platform.OS === 'ios' ? 'padding' : undefined}
     >
       <ScrollView
         contentContainerStyle={styles.scrollContent}
@@ -177,8 +177,8 @@ export default function RegisterScreen() {
       >
         {/* Header */}
         <View style={styles.header}>
-          <Text style={styles.title}>Create Account</Text>
-          <Text style={styles.subtitle}>Join EffortlessInsight to manage your compliance</Text>
+          <Text style={styles.title}>{t('auth.createAccount')}</Text>
+          <Text style={styles.subtitle}>{t('auth.joinEffortlessinsightToManageYourComplia')}</Text>
         </View>
 
         {/* Error Message */}
@@ -195,8 +195,8 @@ export default function RegisterScreen() {
             name="name"
             render={({ field: { onChange, onBlur, value } }) => (
               <Input
-                label="Full Name"
-                placeholder="Enter your full name"
+                label={t('auth.fullName')}
+                placeholder={t('auth.enterYourFullName')}
                 autoCapitalize="words"
                 leftIcon={<User size={20} color={COLORS.gray[500]} />}
                 value={value}
@@ -212,8 +212,8 @@ export default function RegisterScreen() {
             name="email"
             render={({ field: { onChange, onBlur, value } }) => (
               <Input
-                label="Email"
-                placeholder="Enter your email"
+                label={t('auth.email')}
+                placeholder={t('auth.enterYourEmail')}
                 keyboardType="email-address"
                 autoCapitalize="none"
                 autoCorrect={false}
@@ -231,8 +231,8 @@ export default function RegisterScreen() {
             name="mobile"
             render={({ field: { onChange, onBlur, value } }) => (
               <Input
-                label="Mobile Number (Optional)"
-                placeholder="Enter your mobile number"
+                label={t('auth.mobileNumberOptional')}
+                placeholder={t('auth.enterYourMobileNumber')}
                 keyboardType="phone-pad"
                 leftIcon={<Phone size={20} color={COLORS.gray[500]} />}
                 value={value}
@@ -248,8 +248,8 @@ export default function RegisterScreen() {
             name="password"
             render={({ field: { onChange, onBlur, value } }) => (
               <Input
-                label="Password"
-                placeholder="Create a password"
+                label={t('auth.password')}
+                placeholder={t('auth.createAPassword')}
                 secureTextEntry
                 leftIcon={<Lock size={20} color={COLORS.gray[500]} />}
                 value={value}
@@ -266,8 +266,8 @@ export default function RegisterScreen() {
             name="confirmPassword"
             render={({ field: { onChange, onBlur, value } }) => (
               <Input
-                label="Confirm Password"
-                placeholder="Confirm your password"
+                label={t('auth.confirmPassword')}
+                placeholder={t('auth.confirmYourPassword')}
                 secureTextEntry
                 leftIcon={<Lock size={20} color={COLORS.gray[500]} />}
                 value={value}
@@ -317,7 +317,7 @@ export default function RegisterScreen() {
 
           {/* Register Button */}
           <Button
-            title="Create Account"
+            title={t('auth.createAccount')}
             onPress={handleSubmit(onSubmit)}
             loading={isLoading}
             fullWidth
@@ -334,9 +334,9 @@ export default function RegisterScreen() {
 
           {/* Login Link */}
           <View style={styles.loginContainer}>
-            <Text style={styles.loginText}>Already have an account? </Text>
+            <Text style={styles.loginText}>{t('auth.alreadyHaveAnAccount')} </Text>
             <TouchableOpacity onPress={() => router.push('/(auth)/login')}>
-              <Text style={styles.loginLink}>Sign In</Text>
+              <Text style={styles.loginLink}>{t('auth.signIn')}</Text>
             </TouchableOpacity>
           </View>
         </View>
@@ -345,7 +345,8 @@ export default function RegisterScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+const createStyles = (COLORS: Palette) =>
+  StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: COLORS.white,

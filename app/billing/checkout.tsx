@@ -14,14 +14,23 @@ import {
 } from 'react-native';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { CreditCard, Check, AlertCircle, Shield } from 'lucide-react-native';
-import RazorpayCheckout from 'react-native-razorpay';
+// Loaded lazily inside handlePayment. expo-router eagerly evaluates every route
+// module at startup, so a top-level import of this native module crashes the whole
+// app before first render in any runtime that lacks it (e.g. Expo Go). Requiring it
+// at the point of use also avoids paying for the payment SDK on unrelated screens.
 import { usePlans, useCreateSubscription, useVerifyPayment, formatAmount } from '../../src/hooks';
 import { useAuthStore } from '../../src/stores';
 import { Button, LoadingSpinner } from '../../src/components';
-import { COLORS, SPACING, FONT_SIZES, BORDER_RADIUS } from '../../src/utils/constants';
+import { SPACING, FONT_SIZES, BORDER_RADIUS } from '../../src/utils/constants';
 import { BillingCycle, PlanDto } from '../../src/types';
+import { useColors, useThemedStyles } from '../../src/theme/useTheme';
+import type { Palette } from '../../src/theme/palettes';
+import { useTranslation } from '../../src/hooks';
 
 export default function CheckoutScreen() {
+  const { t } = useTranslation();
+  const styles = useThemedStyles(createStyles);
+  const COLORS = useColors();
   const router = useRouter();
   const params = useLocalSearchParams<{ planCode: string; billingCycle: string }>();
   const { user } = useAuthStore();
@@ -75,6 +84,7 @@ export default function CheckoutScreen() {
         },
       };
 
+      const RazorpayCheckout = require('react-native-razorpay').default;
       const paymentData = await RazorpayCheckout.open(razorpayOptions);
 
       // Verify payment
@@ -112,9 +122,9 @@ export default function CheckoutScreen() {
     return (
       <View style={styles.errorContainer}>
         <AlertCircle size={48} color={COLORS.error} />
-        <Text style={styles.errorText}>Plan not found</Text>
+        <Text style={styles.errorText}>{t('billing.planNotFound')}</Text>
         <Button
-          title="Go Back"
+          title={t('billing.goBack')}
           onPress={() => router.back()}
           variant="outline"
           style={styles.errorButton}
@@ -137,7 +147,7 @@ export default function CheckoutScreen() {
     <ScrollView style={styles.container} showsVerticalScrollIndicator={false}>
       {/* Order Summary */}
       <View style={styles.section}>
-        <Text style={styles.sectionTitle}>Order Summary</Text>
+        <Text style={styles.sectionTitle}>{t('billing.orderSummary')}</Text>
         <View style={styles.summaryCard}>
           {/* Plan Info */}
           <View style={styles.planRow}>
@@ -158,7 +168,7 @@ export default function CheckoutScreen() {
           {/* Price Breakdown */}
           {billingCycle === 'annually' && price && (
             <View style={styles.priceRow}>
-              <Text style={styles.priceLabel}>Monthly equivalent</Text>
+              <Text style={styles.priceLabel}>{t('billing.monthlyEquivalent')}</Text>
               <Text style={styles.priceValue}>
                 {formatAmount((pricePerMonth || 0) * 100)}/mo
               </Text>
@@ -169,7 +179,7 @@ export default function CheckoutScreen() {
             selectedPlan.pricing.annualDiscount > 0 &&
             billingCycle === 'annually' && (
               <View style={styles.priceRow}>
-                <Text style={styles.savingsLabel}>Annual savings</Text>
+                <Text style={styles.savingsLabel}>{t('billing.annualSavings')}</Text>
                 <Text style={styles.savingsValue}>
                   {selectedPlan.pricing.annualDiscount}% off
                 </Text>
@@ -203,7 +213,7 @@ export default function CheckoutScreen() {
 
       {/* Features */}
       <View style={styles.section}>
-        <Text style={styles.sectionTitle}>What's Included</Text>
+        <Text style={styles.sectionTitle}>{t('billing.whatSIncluded')}</Text>
         <View style={styles.featuresCard}>
           {selectedPlan.features.map((feature, index) => (
             <View key={index} style={styles.featureRow}>
@@ -250,7 +260,8 @@ export default function CheckoutScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+const createStyles = (COLORS: Palette) =>
+  StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: COLORS.gray[50],

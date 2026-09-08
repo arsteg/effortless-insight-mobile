@@ -10,10 +10,16 @@ import { AlertCircle } from 'lucide-react-native';
 import { usePlans, useCurrentSubscription } from '../../src/hooks';
 import { BillingToggle, PlanCard } from '../../src/components/billing';
 import { LoadingSpinner, EmptyState } from '../../src/components';
-import { COLORS, SPACING, FONT_SIZES } from '../../src/utils/constants';
+import { SPACING, FONT_SIZES } from '../../src/utils/constants';
 import { BillingCycle } from '../../src/types';
+import { useColors, useThemedStyles } from '../../src/theme/useTheme';
+import type { Palette } from '../../src/theme/palettes';
+import { useTranslation } from '../../src/hooks';
 
 export default function PlansScreen() {
+  const { t } = useTranslation();
+  const styles = useThemedStyles(createStyles);
+  const COLORS = useColors();
   const router = useRouter();
   const params = useLocalSearchParams<{ cycle?: string }>();
 
@@ -53,8 +59,8 @@ export default function PlansScreen() {
         <EmptyState
           type="error"
           icon={<AlertCircle size={48} color={COLORS.error} />}
-          title="Failed to load plans"
-          message="Please check your connection and try again."
+          title={t('billing.failedToLoadPlans')}
+          message={t('billing.pleaseCheckYourConnectionAndTryAgain')}
           actionLabel="Retry"
           onAction={() => refetch()}
         />
@@ -81,7 +87,7 @@ export default function PlansScreen() {
     >
       {/* Header */}
       <View style={styles.header}>
-        <Text style={styles.title}>Choose Your Plan</Text>
+        <Text style={styles.title}>{t('billing.chooseYourPlan')}</Text>
         <Text style={styles.subtitle}>
           Select the plan that best fits your needs
         </Text>
@@ -120,7 +126,8 @@ export default function PlansScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+const createStyles = (COLORS: Palette) =>
+  StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: COLORS.gray[50],

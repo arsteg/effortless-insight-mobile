@@ -127,18 +127,29 @@ export async function getBiometricEnabled(): Promise<boolean> {
 }
 
 /**
- * Store dark mode preference
+ * Store the theme preference.
+ *
+ * Three-valued rather than a boolean, so "follow the system" is a real choice
+ * and not merely the absence of one (TC-MOB-065). Written to the same key: the
+ * old values "true"/"false" still read correctly below.
  */
-export async function setDarkModeEnabled(enabled: boolean): Promise<void> {
-  await setItem(STORAGE_KEYS.DARK_MODE_ENABLED, String(enabled));
+export async function setThemeMode(mode: 'light' | 'dark' | 'system'): Promise<void> {
+  await setItem(STORAGE_KEYS.DARK_MODE_ENABLED, mode);
 }
 
-/**
- * Get dark mode preference
- */
-export async function getDarkModeEnabled(): Promise<boolean> {
+export async function getThemeMode(): Promise<'light' | 'dark' | 'system'> {
   const value = await getItem(STORAGE_KEYS.DARK_MODE_ENABLED);
-  return value === 'true';
+
+  // Migrate the previous boolean encoding rather than resetting anyone who had
+  // already chosen dark.
+  if (value === 'true') return 'dark';
+  if (value === 'false') return 'light';
+
+  if (value === 'light' || value === 'dark' || value === 'system') return value;
+
+  // Default: follow the OS. A new install should look like the rest of the
+  // phone without the user having to ask.
+  return 'system';
 }
 
 /**

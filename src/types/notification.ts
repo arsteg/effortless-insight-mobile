@@ -99,14 +99,17 @@ export interface UnreadCountResponse {
 }
 
 // User notification preferences
+/**
+ * The screen-facing shape. NOT the wire format — the API nests each channel in
+ * an object and names several fields differently. `utils/notificationPreferences`
+ * converts between the two; see the note there for what went wrong before.
+ */
 export interface NotificationPreferencesDto {
-  userId: string;
   channels: NotificationChannelPreferences;
   quietHours: QuietHoursPreferences;
   dailyDigest: DailyDigestPreferences;
   weeklyDigest: WeeklyDigestPreferences;
-  typePreferences: Record<NotificationType, TypePreference>;
-  updatedAt: string;
+  typePreferences: Partial<Record<NotificationType, TypePreference>>;
 }
 
 // Channel preferences
@@ -121,18 +124,19 @@ export interface NotificationChannelPreferences {
 // Quiet hours preferences
 export interface QuietHoursPreferences {
   enabled: boolean;
+  /** Sent to the API as `start`. */
   startTime: string; // HH:mm format
+  /** Sent to the API as `end`. */
   endTime: string; // HH:mm format
   timezone: string;
-  allowCritical: boolean;
 }
 
 // Daily digest preferences
 export interface DailyDigestPreferences {
   enabled: boolean;
+  /** Sent to the API as `digest.daily.time`. */
   sendTime: string; // HH:mm format
   timezone: string;
-  includeRead: boolean;
 }
 
 // Weekly digest preferences
@@ -144,10 +148,12 @@ export interface WeeklyDigestPreferences {
 }
 
 // Type-specific preference
+/**
+ * The API stores per-type prefs as one boolean per channel. The screen offers a
+ * single switch, so `enabled` means "may reach me on some channel".
+ */
 export interface TypePreference {
   enabled: boolean;
-  channels: NotificationChannel[];
-  priority: NotificationPriority;
 }
 
 // Update preferences request
@@ -160,11 +166,18 @@ export interface UpdateNotificationPreferencesRequest {
 }
 
 // Push token registration
+/**
+ * Matches the API's `RegisterPushTokenRequest(Token, Platform, DeviceInfo)`.
+ *
+ * The flat `deviceId`/`deviceName` this used to send bound to nothing, so
+ * every token row stored an empty DeviceInfo — leaving no way to tell one of a
+ * user's devices from another when the per-user cap retires the oldest.
+ */
 export interface RegisterPushTokenRequest {
   token: string;
   platform: 'ios' | 'android' | 'web';
-  deviceId: string;
-  deviceName?: string;
+  /** Free-form; the entity documents { deviceId, model, os, appVersion }. */
+  deviceInfo?: Record<string, string | undefined>;
 }
 
 // Notification action result

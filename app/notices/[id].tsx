@@ -2,7 +2,7 @@
  * Notice Detail Screen
  */
 
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useEffect } from 'react';
 import {
   View,
   Text,
@@ -11,6 +11,7 @@ import {
   TouchableOpacity,
   RefreshControl,
   Modal,
+  Share,
   Alert,
   TextInput,
   KeyboardAvoidingView,
@@ -24,7 +25,9 @@ import {
   Clock,
   AlertCircle,
   CheckCircle,
+  CloudDownload,
   ChevronRight,
+  Share2,
   MessageSquare,
   Paperclip,
   Play,
@@ -37,17 +40,67 @@ import {
   File,
   Image,
 } from 'lucide-react-native';
+import { useUIStore, useAuthStore } from '../../src/stores';
+import { getApiErrorMessage } from '../../src/services/api';
+import type { NoticeStatus } from '../../src/types/api';
+import {
+  getAllowedTransitions,
+  transitionRequiresReason,
+  statusLabel,
+} from '../../src/utils/noticeStatus';
+import {
+  buildNoticeShareMessage,
+  buildNoticeShareTitle,
+  canShareNotice,
+} from '../../src/utils/noticeShare';
+import { useUpdateNoticeStatus, useCacheAge } from '../../src/hooks/useNotices';
 import { useNotice, useWorkflowProgress, useAttachments, useAdvanceWorkflow, useLatestResponse, useSaveDraft, useSubmitForReview, useApproveResponse, useMarkSubmitted, useNoticeDownloadUrl, useAttachmentDownloadUrl } from '../../src/hooks/useNotices';
 import { useNoticeTasks, useComments, useCreateComment, useCreateTask, useDocumentRequests, useSubmitDocument, useNoticeActivity } from '../../src/hooks/useTasks';
 import { useTranslation } from '../../src/hooks';
 import * as DocumentPicker from 'expo-document-picker';
-import { LoadingSpinner, Button, EmptyState } from '../../src/components/common';
-import { COLORS, SPACING, FONT_SIZES, BORDER_RADIUS, RISK_COLORS, STATUS_COLORS } from '../../src/utils/constants';
+import * as Linking from 'expo-linking';
+import {
+  LoadingSpinner,
+  Button,
+  EmptyState,
+  DatePickerSheet,
+  OfflineContentBadge,
+} from '../../src/components/common';
+import { getCachedNoticeDetailAge } from '../../src/services/storage/cache';
+import { getOfflinePreferences } from '../../src/services/offlinePreferences';
+import { shouldAutoSaveDocumentNow } from '../../src/utils/offlinePreferences';
+import {
+  getCachedDocument,
+  cacheDocument,
+  touchDocument,
+  removeDocument,
+  listCachedDocuments,
+} from '../../src/services/documentCache';
+import {
+  documentKey,
+  formatBytes,
+  NOT_CACHED_OFFLINE_MESSAGE,
+} from '../../src/utils/documentCachePolicy';
+import { scheduleTaskReminders } from '../../src/services/taskReminders';
+import {
+  formatDueDate,
+  validateTaskTitle,
+  isTaskTitleSubmittable,
+  TASK_TITLE_MAX,
+  statusLabel as taskStatusLabel,
+  statusColor as taskStatusColor,
+} from '../../src/utils/taskDisplay';
+import { SPACING, FONT_SIZES, BORDER_RADIUS, RISK_COLORS, STATUS_COLORS } from '../../src/utils/constants';
 import { NoticeDetailDto, TaskDto, CommentResponseDto, DocumentRequestDto, DocumentRequestStatus, ResponseDto, NoticeResponseStatus, ActivityDto, CommentVisibility } from '../../src/types';
+import { useColors, useThemedStyles } from '../../src/theme/useTheme';
+import type { Palette } from '../../src/theme/palettes';
 
 type TabType = 'overview' | 'analysis' | 'response' | 'tasks' | 'comments' | 'documents' | 'activity';
 
 export default function NoticeDetailScreen() {
+  const { t } = useTranslation();
+  const styles = useThemedStyles(createStyles);
+  const COLORS = useColors();
   const { id } = useLocalSearchParams<{ id: string }>();
   const router = useRouter();
   const [activeTab, setActiveTab] = useState<TabType>('overview');
@@ -61,17 +114,124 @@ export default function NoticeDetailScreen() {
   const noticeId = id ?? '';
 
   const { data: notice, isLoading, isError, refetch: refetchNotice } = useNotice(noticeId);
+  const isOnline = useUIStore((state) => state.isOnline);
+  const connectionType = useUIStore((state) => state.connectionType);
+  const cachedAt = useCacheAge(
+    useCallback(() => getCachedNoticeDetailAge(noticeId), [noticeId]),
+    [noticeId]
+  );
+
+  // Which documents are held on the device, so rows can show a saved state
+  // rather than a download icon that says nothing about what is already here.
+  const [cachedKeys, setCachedKeys] = useState<Set<string>>(new Set());
+  const [pinningId, setPinningId] = useState<string | null>(null);
+
+  const refreshCachedKeys = useCallback(async () => {
+    const manifest = await listCachedDocuments();
+    setCachedKeys(new Set(manifest.map((entry) => entry.key)));
+  }, []);
+
+  useEffect(() => {
+    void refreshCachedKeys();
+  }, [refreshCachedKeys, noticeId]);
+
+  /** Save an attachment for offline use, or remove a saved copy. */
   const noticeDownloadUrl = useNoticeDownloadUrl(noticeId);
   const attachmentDownloadUrl = useAttachmentDownloadUrl();
   const { data: workflow, refetch: refetchWorkflow } = useWorkflowProgress(noticeId);
   const { data: tasksData, refetch: refetchTasks } = useNoticeTasks(noticeId);
   const { data: commentsData, refetch: refetchComments } = useComments(noticeId);
   const { data: attachments, refetch: refetchAttachments } = useAttachments(noticeId);
+  const { showToast } = useUIStore();
+
+  const handleTogglePin = useCallback(
+    async (attachment: { id: string; fileName: string }) => {
+      setPinningId(attachment.id);
+      try {
+        const existing = await getCachedDocument(noticeId, attachment.id);
+        if (existing) {
+          await removeDocument(noticeId, attachment.id);
+          showToast('info', 'Removed from offline downloads');
+        } else {
+          if (!isOnline) {
+            Alert.alert('Not available offline', NOT_CACHED_OFFLINE_MESSAGE);
+            return;
+          }
+          const result = await attachmentDownloadUrl.mutateAsync({
+            noticeId,
+            attachmentId: attachment.id,
+          });
+          if (!result.url) {
+            Alert.alert(t('noticeDetail.error'), t('noticeDetail.downloadUrlNotAvailable'));
+            return;
+          }
+          const saved = await cacheDocument({
+            noticeId,
+            attachmentId: attachment.id,
+            fileName: attachment.fileName,
+            url: result.url,
+            pinned: true,
+          });
+          showToast(
+            saved ? 'success' : 'error',
+            saved
+              ? `Saved for offline · ${formatBytes(saved.size)}`
+              : 'Could not save this document.'
+          );
+        }
+        await refreshCachedKeys();
+      } catch (error) {
+        Alert.alert(t('noticeDetail.error'), getApiErrorMessage(error));
+      } finally {
+        setPinningId(null);
+      }
+    },
+    [noticeId, isOnline, attachmentDownloadUrl, refreshCachedKeys, showToast]
+  );
   const { data: documentRequestsData, refetch: refetchDocRequests } = useDocumentRequests(noticeId);
   const { data: latestResponse, refetch: refetchResponse } = useLatestResponse(noticeId);
   const { data: activityData, refetch: refetchActivity, fetchNextPage: fetchNextActivity, hasNextPage: hasMoreActivity } = useNoticeActivity(noticeId);
 
   const advanceWorkflowMutation = useAdvanceWorkflow();
+  const { user } = useAuthStore();
+  const updateStatusMutation = useUpdateNoticeStatus();
+
+  // Viewers can read a notice but must not re-distribute it outside the app.
+  const mayShare = canShareNotice(user?.role);
+
+  const handleShare = async () => {
+    if (!notice) return;
+    try {
+      const message = buildNoticeShareMessage(
+        notice,
+        Linking.createURL(`notices/${notice.id}`)
+      );
+      await Share.share(
+        { message, title: buildNoticeShareTitle(notice) },
+        { subject: buildNoticeShareTitle(notice) }
+      );
+    } catch (error) {
+      // Dismissing the sheet is not an error; only a real failure lands here.
+      console.error('Share failed:', error);
+      Alert.alert(t('noticeDetail.error'), t('noticeDetail.couldNotOpenTheShareSheet'));
+    }
+  };
+
+  // Workflow transitions when the engine knows about this notice; otherwise
+  // the plain status list, which the /notices/{id}/status endpoint accepts.
+  const workflowTransitions = workflow?.availableTransitions ?? [];
+  const statusOptions = workflowTransitions.length
+    ? workflowTransitions
+    : // Only legal moves: offering every status made the second change fail
+      // with 400 INVALID_TRANSITION (TC-MOB-040).
+      getAllowedTransitions(notice?.status).map((value) => ({
+        key: value,
+        label: statusLabel(value),
+        description: transitionRequiresReason(notice?.status, value)
+          ? 'A reason is required'
+          : undefined,
+      }));
+  const canChangeStatus = statusOptions.length > 0;
 
   const onRefresh = async () => {
     setRefreshing(true);
@@ -88,46 +248,112 @@ export default function NoticeDetailScreen() {
     setRefreshing(false);
   };
 
+  /**
+   * Applies a status change through whichever path is available: the workflow
+   * engine when the notice has an instance, otherwise the direct status
+   * endpoint. Both invalidate the detail and list caches on success.
+   */
   const handleAdvanceWorkflow = (transitionKey: string, transitionLabel: string) => {
     Alert.alert(
-      'Confirm Transition',
-      `Are you sure you want to: ${transitionLabel}?`,
+      'Change status?',
+      `This notice will be marked as: ${transitionLabel}`,
       [
         { text: 'Cancel', style: 'cancel' },
         {
           text: 'Confirm',
           onPress: () => {
-            advanceWorkflowMutation.mutate(
-              { noticeId, transitionKey },
-              {
-                onSuccess: () => {
-                  setShowTransitionModal(false);
-                  Alert.alert('Success', 'Workflow advanced successfully');
-                },
-                onError: (error) => {
-                  Alert.alert('Error', error.message || 'Failed to advance workflow');
-                },
-              }
-            );
+            const onSuccess = () => {
+              setShowTransitionModal(false);
+              // A toast, not an alert: the user just confirmed this, and a
+              // second dialog to say "it worked" is pure friction.
+              showToast('success', `Status changed to ${transitionLabel}`);
+            };
+            const onError = (error: unknown) => {
+              // `error.message` on an axios error is "Request failed with
+              // status code 400" — useless. The envelope carries the real
+              // reason, e.g. an invalid transition or a missing reason.
+              Alert.alert('Could not change status', getApiErrorMessage(error));
+            };
+
+            if (workflowTransitions.length) {
+              advanceWorkflowMutation.mutate({ noticeId, transitionKey }, { onSuccess, onError });
+            } else {
+              updateStatusMutation.mutate(
+                { noticeId, status: transitionKey },
+                { onSuccess, onError }
+              );
+            }
           },
         },
       ]
     );
   };
 
+  /**
+   * Open a document, preferring the on-device copy.
+   *
+   * Order matters: the cache is checked first so an already-saved document
+   * opens instantly and works offline, and the network is only reached for
+   * something not yet held (TC-MOB-057).
+   */
+  const openDocument = useCallback(
+    async (params: {
+      attachmentId?: string;
+      fileName: string;
+      fetchUrl: () => Promise<{ url?: string }>;
+    }) => {
+      // Always opened from the remote URL. `WebBrowser.openBrowserAsync`
+      // handles http/https only and fails on a `file://` path, and this build
+      // has no module that can render a local file — so the download cache
+      // cannot serve the view itself yet (TC-MOB-057).
+      if (!isOnline) {
+        const cached = await getCachedDocument(noticeId, params.attachmentId);
+        Alert.alert(
+          'Not available offline',
+          cached
+            ? 'This document is saved on your device, but opening it needs an internet connection in this build.'
+            : NOT_CACHED_OFFLINE_MESSAGE
+        );
+        return;
+      }
+
+      const result = await params.fetchUrl();
+      if (!result.url) {
+        Alert.alert(t('noticeDetail.error'), t('noticeDetail.downloadUrlNotAvailable'));
+        return;
+      }
+
+      await WebBrowser.openBrowserAsync(result.url, {
+        presentationStyle: WebBrowser.WebBrowserPresentationStyle.FULL_SCREEN,
+        toolbarColor: COLORS.primary,
+        controlsColor: COLORS.white,
+      });
+
+      // Saved afterwards, in the background: caching must never delay or break
+      // opening the document. Skipped when the user has turned off automatic
+      // saving — an explicit pin still keeps a copy (TC-MOB-061).
+      void touchDocument(noticeId, params.attachmentId);
+      if (shouldAutoSaveDocumentNow(getOfflinePreferences(), connectionType)) {
+        void cacheDocument({
+          noticeId,
+          attachmentId: params.attachmentId,
+          fileName: params.fileName,
+          url: result.url,
+        });
+      }
+    },
+    [noticeId, isOnline]
+  );
+
   const handleViewOriginalPdf = async () => {
     setIsViewingPdf(true);
     try {
-      const result = await noticeDownloadUrl.mutateAsync();
-      if (result.url) {
-        await WebBrowser.openBrowserAsync(result.url, {
-          presentationStyle: WebBrowser.WebBrowserPresentationStyle.FULL_SCREEN,
-          toolbarColor: COLORS.primary,
-          controlsColor: COLORS.white,
-        });
-      }
+      await openDocument({
+        fileName: `${notice?.noticeNumber || 'notice'}.pdf`,
+        fetchUrl: () => noticeDownloadUrl.mutateAsync(),
+      });
     } catch (error) {
-      Alert.alert('Error', 'Failed to load the PDF. Please try again.');
+      Alert.alert(t('noticeDetail.error'), getApiErrorMessage(error));
     } finally {
       setIsViewingPdf(false);
     }
@@ -136,23 +362,15 @@ export default function NoticeDetailScreen() {
   const handleOpenAttachment = async (attachment: { id: string; fileName: string; downloadUrl?: string }) => {
     setDownloadingAttachment(attachment.id);
     try {
-      // Get fresh download URL
-      const result = await attachmentDownloadUrl.mutateAsync({
-        noticeId,
+      await openDocument({
         attachmentId: attachment.id,
+        fileName: attachment.fileName,
+        fetchUrl: () =>
+          attachmentDownloadUrl.mutateAsync({ noticeId, attachmentId: attachment.id }),
       });
-
-      if (result.url) {
-        await WebBrowser.openBrowserAsync(result.url, {
-          presentationStyle: WebBrowser.WebBrowserPresentationStyle.FULL_SCREEN,
-          toolbarColor: COLORS.primary,
-          controlsColor: COLORS.white,
-        });
-      } else {
-        Alert.alert('Error', 'Download URL not available');
-      }
+      await refreshCachedKeys();
     } catch (error) {
-      Alert.alert('Error', 'Failed to open attachment');
+      Alert.alert(t('noticeDetail.error'), getApiErrorMessage(error));
     } finally {
       setDownloadingAttachment(null);
     }
@@ -177,7 +395,7 @@ export default function NoticeDetailScreen() {
   };
 
   if (isLoading) {
-    return <LoadingSpinner fullScreen message="Loading notice..." />;
+    return <LoadingSpinner fullScreen message={t('noticeDetail.loadingNotice')} />;
   }
 
   // Error / deleted / not-found: show a recoverable state instead of an
@@ -187,7 +405,7 @@ export default function NoticeDetailScreen() {
       <View style={styles.container}>
         <EmptyState
           type="error"
-          title="Notice not available"
+          title={t('noticeDetail.noticeNotAvailable')}
           message="This notice couldn't be loaded. It may have been deleted or you no longer have access."
           actionLabel="Go back"
           onAction={() => router.back()}
@@ -218,30 +436,58 @@ export default function NoticeDetailScreen() {
           />
         }
       >
+        {/* Offline, mark this as a saved copy — a stale notice status or
+            deadline is indistinguishable from a live one otherwise. */}
+        <OfflineContentBadge cachedAt={cachedAt} visible={!isOnline} />
+
         {/* Header Card */}
         <NoticeHeader
           notice={notice}
           onViewPdf={handleViewOriginalPdf}
           isViewingPdf={isViewingPdf}
+          onShare={mayShare ? handleShare : undefined}
         />
 
-        {/* Workflow Progress */}
-        {workflow && <WorkflowProgress workflow={workflow} />}
+        {/* Status. Always rendered: the workflow endpoint 404s for notices with
+            no workflow instance, which previously hid the status AND every way
+            to change it (TC-MOB-040). */}
+        <NoticeStatusSection
+          status={notice.status}
+          workflow={workflow}
+          onChangeStatus={() => setShowTransitionModal(true)}
+        />
 
-        {/* Tab Navigation */}
-        <View style={styles.tabContainer}>
-          {tabs.map((tab) => (
-            <TouchableOpacity
-              key={tab.key}
-              style={[styles.tab, activeTab === tab.key && styles.tabActive]}
-              onPress={() => setActiveTab(tab.key)}
-            >
-              <Text style={[styles.tabText, activeTab === tab.key && styles.tabTextActive]}>
-                {tab.label}
-                {tab.count !== undefined && ` (${tab.count})`}
-              </Text>
-            </TouchableOpacity>
-          ))}
+        {/* Tab Navigation.
+
+            Seven tabs never fit a phone's width. In a plain row they were laid
+            out anyway: iOS shrank the labels until "Comments (3)" read as "C",
+            and Android clipped the overflow so the last tabs were simply not
+            on screen. The row scrolls horizontally instead, and each tab is
+            barred from shrinking so a label is never squeezed to nothing. */}
+        <View style={styles.tabBar}>
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={styles.tabContainer}
+          >
+            {tabs.map((tab) => (
+              <TouchableOpacity
+                key={tab.key}
+                style={[styles.tab, activeTab === tab.key && styles.tabActive]}
+                onPress={() => setActiveTab(tab.key)}
+                accessibilityRole="tab"
+                accessibilityState={{ selected: activeTab === tab.key }}
+              >
+                <Text
+                  numberOfLines={1}
+                  style={[styles.tabText, activeTab === tab.key && styles.tabTextActive]}
+                >
+                  {tab.label}
+                  {tab.count !== undefined && ` (${tab.count})`}
+                </Text>
+              </TouchableOpacity>
+            ))}
+          </ScrollView>
         </View>
 
         {/* Tab Content */}
@@ -293,14 +539,14 @@ export default function NoticeDetailScreen() {
       </ScrollView>
 
       {/* Bottom Action */}
-      {workflow && workflow.availableTransitions && workflow.availableTransitions.length > 0 && (
+      {canChangeStatus && (
         <View style={styles.bottomAction}>
           <Button
-            title="Advance Workflow"
+            title={t('noticeDetail.changeStatus')}
             onPress={() => setShowTransitionModal(true)}
             icon={<Play size={18} color={COLORS.white} />}
             fullWidth
-            disabled={advanceWorkflowMutation.isPending}
+            disabled={advanceWorkflowMutation.isPending || updateStatusMutation.isPending}
           />
         </View>
       )}
@@ -314,15 +560,15 @@ export default function NoticeDetailScreen() {
       >
         <View style={styles.modalOverlay}>
           <View style={styles.modalContent}>
-            <Text style={styles.modalTitle}>Select Transition</Text>
-            <Text style={styles.modalSubtitle}>Choose an action to advance the workflow</Text>
+            <Text style={styles.modalTitle}>{t('noticeDetail.changeStatus')}</Text>
+            <Text style={styles.modalSubtitle}>{t('noticeDetail.chooseTheNewStatusForThisNotice')}</Text>
 
-            {workflow?.availableTransitions?.map((transition) => (
+            {statusOptions.map((transition) => (
               <TouchableOpacity
                 key={transition.key}
                 style={styles.transitionOption}
                 onPress={() => handleAdvanceWorkflow(transition.key, transition.label)}
-                disabled={advanceWorkflowMutation.isPending}
+                disabled={advanceWorkflowMutation.isPending || updateStatusMutation.isPending}
               >
                 <View style={styles.transitionContent}>
                   <Text style={styles.transitionLabel}>{transition.label}</Text>
@@ -338,7 +584,7 @@ export default function NoticeDetailScreen() {
               style={styles.cancelButton}
               onPress={() => setShowTransitionModal(false)}
             >
-              <Text style={styles.cancelButtonText}>Cancel</Text>
+              <Text style={styles.cancelButtonText}>{t('noticeDetail.cancel')}</Text>
             </TouchableOpacity>
           </View>
         </View>
@@ -354,7 +600,7 @@ export default function NoticeDetailScreen() {
         <View style={styles.modalOverlay}>
           <View style={styles.attachmentsModalContent}>
             <View style={styles.attachmentsModalHeader}>
-              <Text style={styles.modalTitle}>Attachments</Text>
+              <Text style={styles.modalTitle}>{t('noticeDetail.attachments')}</Text>
               <TouchableOpacity onPress={() => setShowAttachmentsModal(false)}>
                 <X size={24} color={COLORS.gray[500]} />
               </TouchableOpacity>
@@ -384,6 +630,33 @@ export default function NoticeDetailScreen() {
                   ) : (
                     <Download size={20} color={COLORS.primary} />
                   )}
+
+                  {/* Save for offline. Separate from opening, so a document can
+                      be kept deliberately rather than only as a side effect of
+                      having viewed it (TC-MOB-057). */}
+                  <TouchableOpacity
+                    style={styles.pinButton}
+                    onPress={(event) => {
+                      event.stopPropagation?.();
+                      void handleTogglePin(attachment);
+                    }}
+                    disabled={pinningId === attachment.id}
+                    accessibilityRole="button"
+                    accessibilityLabel={
+                      cachedKeys.has(documentKey(noticeId, attachment.id))
+                        ? `Remove ${attachment.fileName} from offline downloads`
+                        : `Save ${attachment.fileName} for offline`
+                    }
+                    hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                  >
+                    {pinningId === attachment.id ? (
+                      <ActivityIndicator size="small" color={COLORS.gray[400]} />
+                    ) : cachedKeys.has(documentKey(noticeId, attachment.id)) ? (
+                      <CheckCircle size={20} color={COLORS.success} />
+                    ) : (
+                      <CloudDownload size={20} color={COLORS.gray[400]} />
+                    )}
+                  </TouchableOpacity>
                 </TouchableOpacity>
               ))}
             </ScrollView>
@@ -392,7 +665,7 @@ export default function NoticeDetailScreen() {
               style={styles.attachmentsCloseButton}
               onPress={() => setShowAttachmentsModal(false)}
             >
-              <Text style={styles.attachmentsCloseText}>Close</Text>
+              <Text style={styles.attachmentsCloseText}>{t('noticeDetail.close')}</Text>
             </TouchableOpacity>
           </View>
         </View>
@@ -405,12 +678,18 @@ export default function NoticeDetailScreen() {
 function NoticeHeader({
   notice,
   onViewPdf,
-  isViewingPdf
+  isViewingPdf,
+  onShare,
 }: {
   notice: NoticeDetailDto;
   onViewPdf: () => void;
   isViewingPdf: boolean;
+  /** Omitted when the current role may not share. */
+  onShare?: () => void;
 }) {
+  const { t } = useTranslation();
+  const styles = useThemedStyles(createStyles);
+  const COLORS = useColors();
   const getRiskColor = (riskLevel?: string) => {
     if (!riskLevel) return COLORS.gray[400];
     return RISK_COLORS[riskLevel as keyof typeof RISK_COLORS] || COLORS.gray[400];
@@ -430,13 +709,26 @@ function NoticeHeader({
             <Text style={styles.noticeNumber}>#{notice.noticeNumber}</Text>
           )}
         </View>
-        {notice.riskLevel && (
-          <View style={[styles.riskBadge, { backgroundColor: getRiskColor(notice.riskLevel) }]}>
-            <Text style={styles.riskText}>
-              {notice.riskLevel.toUpperCase()} RISK
-            </Text>
-          </View>
-        )}
+        <View style={styles.headerActions}>
+          {notice.riskLevel && (
+            <View style={[styles.riskBadge, { backgroundColor: getRiskColor(notice.riskLevel) }]}>
+              <Text style={styles.riskText}>
+                {notice.riskLevel.toUpperCase()} RISK
+              </Text>
+            </View>
+          )}
+          {onShare && (
+            <TouchableOpacity
+              style={styles.shareButton}
+              onPress={onShare}
+              accessibilityRole="button"
+              accessibilityLabel="Share this notice"
+              hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+            >
+              <Share2 size={20} color={COLORS.primary} />
+            </TouchableOpacity>
+          )}
+        </View>
       </View>
 
       {/* View Original PDF Button */}
@@ -450,7 +742,7 @@ function NoticeHeader({
         ) : (
           <>
             <Eye size={18} color={COLORS.primary} />
-            <Text style={styles.viewPdfButtonText}>View Original Notice PDF</Text>
+            <Text style={styles.viewPdfButtonText}>{t('noticeDetail.viewOriginalNoticePdf')}</Text>
           </>
         )}
       </TouchableOpacity>
@@ -458,7 +750,7 @@ function NoticeHeader({
       <View style={styles.headerStats}>
         <View style={styles.statItem}>
           <Text style={styles.statValue}>{formatCurrency(notice.taxAmount)}</Text>
-          <Text style={styles.statLabel}>Demand</Text>
+          <Text style={styles.statLabel}>{t('noticeDetail.demand')}</Text>
         </View>
         <View style={styles.statDivider} />
         <View style={styles.statItem}>
@@ -475,83 +767,139 @@ function NoticeHeader({
                 : `${notice.daysRemaining} days`
               : '-'}
           </Text>
-          <Text style={styles.statLabel}>Deadline</Text>
+          <Text style={styles.statLabel}>{t('noticeDetail.deadline')}</Text>
         </View>
         <View style={styles.statDivider} />
         <View style={styles.statItem}>
           <Text style={styles.statValue}>{notice.riskScore || '-'}</Text>
-          <Text style={styles.statLabel}>Risk Score</Text>
+          <Text style={styles.statLabel}>{t('noticeDetail.riskScore')}</Text>
         </View>
       </View>
     </View>
   );
 }
 
-// Workflow Progress Component
-function WorkflowProgress({
+/**
+ * Shows the notice's status and, when it can be changed, an affordance to do
+ * so. Renders the workflow stage tracker when the engine has an instance,
+ * falling back to a single badge otherwise — so the status is never invisible
+ * just because the workflow lookup failed.
+ */
+function NoticeStatusSection({
+  status,
   workflow,
+  onChangeStatus,
 }: {
-  workflow: { stages: Array<{ name: string; isCompleted: boolean; isCurrentStage: boolean }> };
+  status: NoticeStatus;
+  workflow?: { stages: { name: string; isCompleted: boolean; isCurrentStage: boolean }[] };
+  onChangeStatus?: () => void;
 }) {
+  const { t } = useTranslation();
+  const styles = useThemedStyles(createStyles);
+  const COLORS = useColors();
+  const Container: React.ComponentType<any> = onChangeStatus ? TouchableOpacity : View;
+
   return (
-    <View style={styles.workflowSection}>
-      <Text style={styles.sectionTitle}>Workflow Progress</Text>
-      <View style={styles.workflowStages}>
-        {workflow.stages.map((stage, index) => (
-          <React.Fragment key={stage.name}>
-            <View style={styles.workflowStage}>
-              <View
-                style={[
-                  styles.stageIndicator,
-                  stage.isCompleted && styles.stageCompleted,
-                  stage.isCurrentStage && styles.stageCurrent,
-                ]}
-              >
-                {stage.isCompleted ? (
-                  <CheckCircle size={16} color={COLORS.white} />
-                ) : (
-                  <Text style={styles.stageNumber}>{index + 1}</Text>
-                )}
-              </View>
-              <Text
-                style={[
-                  styles.stageName,
-                  stage.isCurrentStage && styles.stageNameActive,
-                ]}
-                numberOfLines={1}
-              >
-                {stage.name}
-              </Text>
-            </View>
-            {index < workflow.stages.length - 1 && (
-              <View
-                style={[
-                  styles.stageConnector,
-                  stage.isCompleted && styles.stageConnectorActive,
-                ]}
-              />
-            )}
-          </React.Fragment>
-        ))}
+    <Container
+      style={styles.workflowSection}
+      onPress={onChangeStatus}
+      activeOpacity={0.7}
+      accessibilityRole={onChangeStatus ? 'button' : undefined}
+      accessibilityLabel={onChangeStatus ? 'Change notice status' : undefined}
+    >
+      <View style={styles.workflowHeader}>
+        <Text style={styles.sectionTitle}>{t('noticeDetail.status')}</Text>
+        {onChangeStatus && (
+          <View style={styles.workflowChangeHint}>
+            <Text style={styles.workflowChangeText}>{t('noticeDetail.change')}</Text>
+            <ChevronRight size={16} color={COLORS.primary} />
+          </View>
+        )}
       </View>
+
+      {workflow?.stages?.length ? (
+        <WorkflowStages stages={workflow.stages} />
+      ) : (
+        <View
+          style={[
+            styles.currentStatusBadge,
+            {
+              backgroundColor:
+                (STATUS_COLORS as Record<string, string>)[status] || COLORS.gray[400],
+            },
+          ]}
+        >
+          <Text style={styles.statusText}>{statusLabel(status)}</Text>
+        </View>
+      )}
+    </Container>
+  );
+}
+
+// Renders just the stage tracker; the surrounding card and header belong to
+// NoticeStatusSection, so both the workflow and no-workflow cases look alike.
+function WorkflowStages({
+  stages,
+}: {
+  stages: { name: string; isCompleted: boolean; isCurrentStage: boolean }[];
+}) {
+  const styles = useThemedStyles(createStyles);
+  const COLORS = useColors();
+  return (
+    <View style={styles.workflowStages}>
+      {stages.map((stage, index) => (
+        <React.Fragment key={stage.name}>
+          <View style={styles.workflowStage}>
+            <View
+              style={[
+                styles.stageIndicator,
+                stage.isCompleted && styles.stageCompleted,
+                stage.isCurrentStage && styles.stageCurrent,
+              ]}
+            >
+              {stage.isCompleted ? (
+                <CheckCircle size={16} color={COLORS.white} />
+              ) : (
+                <Text style={styles.stageNumber}>{index + 1}</Text>
+              )}
+            </View>
+            <Text
+              style={[styles.stageName, stage.isCurrentStage && styles.stageNameActive]}
+              numberOfLines={1}
+            >
+              {stage.name}
+            </Text>
+          </View>
+          {index < stages.length - 1 && (
+            <View
+              style={[
+                styles.stageConnector,
+                stage.isCompleted && styles.stageConnectorActive,
+              ]}
+            />
+          )}
+        </React.Fragment>
+      ))}
     </View>
   );
 }
 
 // Overview Tab
 function OverviewTab({ notice }: { notice: NoticeDetailDto }) {
+  const { t } = useTranslation();
+  const styles = useThemedStyles(createStyles);
   return (
     <View>
-      <InfoRow label="Notice Type" value={notice.noticeType} />
-      <InfoRow label="Category" value={notice.noticeCategory} />
+      <InfoRow label={t('noticeDetail.noticeType')} value={notice.noticeType} />
+      <InfoRow label={t('noticeDetail.category')} value={notice.noticeCategory} />
       <InfoRow label="GSTIN" value={notice.gstin} />
-      <InfoRow label="Issue Date" value={notice.issueDate ? new Date(notice.issueDate).toLocaleDateString() : '-'} />
-      <InfoRow label="Response Deadline" value={notice.responseDeadline ? new Date(notice.responseDeadline).toLocaleDateString() : '-'} />
-      <InfoRow label="Issuing Authority" value={notice.issuingAuthority} />
-      <InfoRow label="Period" value={notice.periodFrom && notice.periodTo ? `${new Date(notice.periodFrom).toLocaleDateString()} - ${new Date(notice.periodTo).toLocaleDateString()}` : '-'} />
+      <InfoRow label={t('noticeDetail.issueDate')} value={notice.issueDate ? new Date(notice.issueDate).toLocaleDateString() : '-'} />
+      <InfoRow label={t('noticeDetail.responseDeadline')} value={notice.responseDeadline ? new Date(notice.responseDeadline).toLocaleDateString() : '-'} />
+      <InfoRow label={t('noticeDetail.issuingAuthority')} value={notice.issuingAuthority} />
+      <InfoRow label={t('noticeDetail.period')} value={notice.periodFrom && notice.periodTo ? `${new Date(notice.periodFrom).toLocaleDateString()} - ${new Date(notice.periodTo).toLocaleDateString()}` : '-'} />
       {notice.tags && notice.tags.length > 0 && (
         <View style={styles.tagsContainer}>
-          <Text style={styles.infoLabel}>Tags</Text>
+          <Text style={styles.infoLabel}>{t('noticeDetail.tags')}</Text>
           <View style={styles.tags}>
             {notice.tags.map((tag) => (
               <View key={tag} style={styles.tag}>
@@ -567,6 +915,8 @@ function OverviewTab({ notice }: { notice: NoticeDetailDto }) {
 
 // Analysis Tab
 function AnalysisTab({ notice }: { notice: NoticeDetailDto }) {
+  const styles = useThemedStyles(createStyles);
+  const COLORS = useColors();
   const { t, isHindi } = useTranslation();
   const report = notice.aiReport;
 
@@ -584,8 +934,62 @@ function AnalysisTab({ notice }: { notice: NoticeDetailDto }) {
   const summary = isHindi && report.summaryHi ? report.summaryHi : report.summaryEn;
   const plainExplanation = isHindi && report.plainHindi ? report.plainHindi : report.plainEnglish;
 
+  // Deadline urgency drives both the wording and the colour, so an overdue
+  // notice reads as overdue at a glance rather than as a neutral date.
+  const days = notice.daysRemaining;
+  const deadlineLabel =
+    days === undefined || days === null
+      ? notice.responseDeadline
+        ? new Date(notice.responseDeadline).toLocaleDateString()
+        : t('analysis.noDeadline')
+      : days < 0
+        ? t('analysis.overdue', { count: Math.abs(days) })
+        : days === 0
+          ? t('analysis.dueToday')
+          : t('analysis.daysRemaining', { count: days });
+  const deadlineTone =
+    days !== undefined && days !== null && days < 0
+      ? COLORS.error
+      : days !== undefined && days !== null && days <= 7
+        ? COLORS.warning
+        : COLORS.gray[600];
+
   return (
     <View>
+      {/* Risk and deadline lead the tab: both are AI-derived outputs, and
+          repeating them here means the analysis stands on its own instead of
+          sending the reader back to Overview (TC-MOB-039). */}
+      {(notice.riskLevel || notice.riskScore !== undefined || notice.responseDeadline) && (
+        <View style={styles.analysisSection}>
+          <Text style={styles.analysisSectionTitle}>{t('analysis.riskAssessment')}</Text>
+
+          <View style={styles.analysisRiskRow}>
+            {notice.riskLevel && (
+              <View
+                style={[
+                  styles.riskBadge,
+                  { backgroundColor: RISK_COLORS[notice.riskLevel as keyof typeof RISK_COLORS] || COLORS.gray[400] },
+                ]}
+              >
+                <Text style={styles.riskText}>{notice.riskLevel.toUpperCase()} RISK</Text>
+              </View>
+            )}
+            {notice.riskScore !== undefined && notice.riskScore !== null && (
+              <Text style={styles.analysisMeta}>
+                {t('analysis.riskScore')}: {notice.riskScore}
+              </Text>
+            )}
+          </View>
+
+          <View style={styles.analysisDeadlineRow}>
+            <Clock size={16} color={deadlineTone} />
+            <Text style={[styles.analysisDeadline, { color: deadlineTone }]}>
+              {t('analysis.responseDeadline')}: {deadlineLabel}
+            </Text>
+          </View>
+        </View>
+      )}
+
       {/* Summary */}
       {summary && (
         <View style={styles.analysisSection}>
@@ -646,6 +1050,9 @@ function AnalysisTab({ notice }: { notice: NoticeDetailDto }) {
 
 // Response Tab
 function ResponseTab({ response, noticeId }: { response: ResponseDto | null | undefined; noticeId: string }) {
+  const { t } = useTranslation();
+  const styles = useThemedStyles(createStyles);
+  const COLORS = useColors();
   const [draftContent, setDraftContent] = useState(response?.content || '');
   const [isSaving, setIsSaving] = useState(false);
   const [showSubmitModal, setShowSubmitModal] = useState(false);
@@ -672,9 +1079,9 @@ function ResponseTab({ response, noticeId }: { response: ResponseDto | null | un
         noticeId,
         data: { content: draftContent.trim() },
       });
-      Alert.alert('Success', 'Draft saved successfully');
+      Alert.alert(t('noticeDetail.success'), t('noticeDetail.draftSavedSuccessfully'));
     } catch (error) {
-      Alert.alert('Error', 'Failed to save draft');
+      Alert.alert(t('noticeDetail.error'), t('noticeDetail.failedToSaveDraft'));
     } finally {
       setIsSaving(false);
     }
@@ -691,17 +1098,16 @@ function ResponseTab({ response, noticeId }: { response: ResponseDto | null | un
       });
       setShowSubmitModal(false);
       setSubmitNotes('');
-      Alert.alert('Success', 'Response submitted for review');
+      Alert.alert(t('noticeDetail.success'), t('noticeDetail.responseSubmittedForReview'));
     } catch (error) {
-      Alert.alert('Error', 'Failed to submit for review');
+      Alert.alert(t('noticeDetail.error'), t('noticeDetail.failedToSubmitForReview'));
     }
   };
 
   const handleApprove = async () => {
     if (!response?.id) return;
 
-    Alert.alert(
-      'Approve Response',
+    Alert.alert(t('noticeDetail.approveResponse'),
       'Are you sure you want to approve this response?',
       [
         { text: 'Cancel', style: 'cancel' },
@@ -713,9 +1119,9 @@ function ResponseTab({ response, noticeId }: { response: ResponseDto | null | un
                 noticeId,
                 responseId: response.id,
               });
-              Alert.alert('Success', 'Response approved');
+              Alert.alert(t('noticeDetail.success'), t('noticeDetail.responseApproved'));
             } catch (error) {
-              Alert.alert('Error', 'Failed to approve response');
+              Alert.alert(t('noticeDetail.error'), t('noticeDetail.failedToApproveResponse'));
             }
           },
         },
@@ -726,8 +1132,7 @@ function ResponseTab({ response, noticeId }: { response: ResponseDto | null | un
   const handleMarkSubmitted = async () => {
     if (!response?.id) return;
 
-    Alert.alert(
-      'Mark as Submitted',
+    Alert.alert(t('noticeDetail.markAsSubmitted'),
       'Mark this response as submitted to the authority?',
       [
         { text: 'Cancel', style: 'cancel' },
@@ -739,9 +1144,9 @@ function ResponseTab({ response, noticeId }: { response: ResponseDto | null | un
                 noticeId,
                 responseId: response.id,
               });
-              Alert.alert('Success', 'Response marked as submitted');
+              Alert.alert(t('noticeDetail.success'), t('noticeDetail.responseMarkedAsSubmitted'));
             } catch (error) {
-              Alert.alert('Error', 'Failed to mark as submitted');
+              Alert.alert(t('noticeDetail.error'), t('noticeDetail.failedToMarkAsSubmitted'));
             }
           },
         },
@@ -787,10 +1192,10 @@ function ResponseTab({ response, noticeId }: { response: ResponseDto | null | un
 
       {/* Draft Editor */}
       <View style={styles.draftEditorContainer}>
-        <Text style={styles.draftLabel}>Response Content</Text>
+        <Text style={styles.draftLabel}>{t('noticeDetail.responseContent')}</Text>
         <TextInput
           style={styles.draftEditor}
-          placeholder="Draft your response to this notice..."
+          placeholder={t('noticeDetail.draftYourResponseToThisNotice')}
           placeholderTextColor={COLORS.gray[400]}
           value={draftContent}
           onChangeText={setDraftContent}
@@ -820,7 +1225,7 @@ function ResponseTab({ response, noticeId }: { response: ResponseDto | null | un
                 onPress={() => setShowSubmitModal(true)}
                 disabled={!draftContent.trim()}
               >
-                <Text style={styles.submitButtonText}>Submit for Review</Text>
+                <Text style={styles.submitButtonText}>{t('noticeDetail.submitForReview')}</Text>
               </TouchableOpacity>
             )}
           </>
@@ -832,7 +1237,7 @@ function ResponseTab({ response, noticeId }: { response: ResponseDto | null | un
             onPress={handleApprove}
           >
             <CheckCircle size={18} color={COLORS.white} />
-            <Text style={styles.approveButtonText}>Approve Response</Text>
+            <Text style={styles.approveButtonText}>{t('noticeDetail.approveResponse')}</Text>
           </TouchableOpacity>
         )}
 
@@ -842,7 +1247,7 @@ function ResponseTab({ response, noticeId }: { response: ResponseDto | null | un
             onPress={handleMarkSubmitted}
           >
             <Send size={18} color={COLORS.white} />
-            <Text style={styles.markSubmittedButtonText}>Mark as Submitted</Text>
+            <Text style={styles.markSubmittedButtonText}>{t('noticeDetail.markAsSubmitted')}</Text>
           </TouchableOpacity>
         )}
       </View>
@@ -850,7 +1255,7 @@ function ResponseTab({ response, noticeId }: { response: ResponseDto | null | un
       {/* Review Notes */}
       {response?.reviewNotes && (
         <View style={styles.reviewNotesContainer}>
-          <Text style={styles.reviewNotesLabel}>Review Notes</Text>
+          <Text style={styles.reviewNotesLabel}>{t('noticeDetail.reviewNotes')}</Text>
           <Text style={styles.reviewNotesText}>{response.reviewNotes}</Text>
           {response.reviewedByName && (
             <Text style={styles.reviewedBy}>— {response.reviewedByName}</Text>
@@ -866,16 +1271,16 @@ function ResponseTab({ response, noticeId }: { response: ResponseDto | null | un
         onRequestClose={() => setShowSubmitModal(false)}
       >
         <KeyboardAvoidingView
-          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+          behavior={Platform.OS === 'ios' ? 'padding' : undefined}
           style={styles.modalOverlay}
         >
           <View style={styles.submitModalContent}>
-            <Text style={styles.modalTitle}>Submit for Review</Text>
-            <Text style={styles.modalSubtitle}>Add any notes for the reviewer</Text>
+            <Text style={styles.modalTitle}>{t('noticeDetail.submitForReview')}</Text>
+            <Text style={styles.modalSubtitle}>{t('noticeDetail.addAnyNotesForTheReviewer')}</Text>
 
             <TextInput
               style={styles.submitNotesInput}
-              placeholder="Notes (optional)"
+              placeholder={t('noticeDetail.notesOptional')}
               placeholderTextColor={COLORS.gray[400]}
               value={submitNotes}
               onChangeText={setSubmitNotes}
@@ -888,13 +1293,13 @@ function ResponseTab({ response, noticeId }: { response: ResponseDto | null | un
                 style={styles.submitModalCancel}
                 onPress={() => setShowSubmitModal(false)}
               >
-                <Text style={styles.submitModalCancelText}>Cancel</Text>
+                <Text style={styles.submitModalCancelText}>{t('noticeDetail.cancel')}</Text>
               </TouchableOpacity>
               <TouchableOpacity
                 style={styles.submitModalConfirm}
                 onPress={handleSubmitForReview}
               >
-                <Text style={styles.submitModalConfirmText}>Submit</Text>
+                <Text style={styles.submitModalConfirmText}>{t('noticeDetail.submit')}</Text>
               </TouchableOpacity>
             </View>
           </View>
@@ -906,34 +1311,60 @@ function ResponseTab({ response, noticeId }: { response: ResponseDto | null | un
 
 // Tasks Tab
 function TasksTab({ tasks, noticeId }: { tasks: TaskDto[]; noticeId: string }) {
+  const { t } = useTranslation();
+  const styles = useThemedStyles(createStyles);
+  const COLORS = useColors();
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [newTaskTitle, setNewTaskTitle] = useState('');
   const [newTaskDescription, setNewTaskDescription] = useState('');
   const [newTaskPriority, setNewTaskPriority] = useState<'low' | 'medium' | 'high' | 'critical'>('medium');
+  // A task with no due date can never be overdue, so the deadline tracking on
+  // the Tasks tab was unreachable for anything created here (TC-MOB-043).
+  const [newTaskDueDate, setNewTaskDueDate] = useState<string | undefined>(undefined);
+  const [showDuePicker, setShowDuePicker] = useState(false);
   const createTask = useCreateTask();
 
+  // `validateTaskTitle` stays quiet on an empty field so the form does not nag
+  // before anything is typed — submittability is a separate question.
+  const titleError = validateTaskTitle(newTaskTitle);
+  const canSubmitTask = isTaskTitleSubmittable(newTaskTitle) && !createTask.isPending;
+
   const handleCreateTask = useCallback(async () => {
-    if (!newTaskTitle.trim()) return;
+    if (!isTaskTitleSubmittable(newTaskTitle)) return;
 
     try {
-      await createTask.mutateAsync({
+      const created = await createTask.mutateAsync({
         noticeId,
         data: {
           title: newTaskTitle.trim(),
           description: newTaskDescription.trim() || undefined,
           priority: newTaskPriority,
-          assignees: [], // No assignees on quick create
+          dueDate: newTaskDueDate,
+          // Omitted, not []. An empty array fails the server's
+          // "between 1 and 5 assignees" rule; omitting it makes the server
+          // default the assignee to the creator (TC-MOB-044).
         },
       });
+
+      // Same reminder behaviour as the calendar's add flow (TC-MOB-048).
+      void scheduleTaskReminders(
+        created.id,
+        created.title,
+        newTaskDueDate,
+        newTaskPriority
+      );
       setNewTaskTitle('');
       setNewTaskDescription('');
       setNewTaskPriority('medium');
+      setNewTaskDueDate(undefined);
       setShowCreateModal(false);
-      Alert.alert('Success', 'Task created successfully');
+      Alert.alert(t('noticeDetail.success'), t('noticeDetail.taskCreatedSuccessfully'));
     } catch (error) {
-      Alert.alert('Error', 'Failed to create task. Please try again.');
+      // Show what the server actually said. The old generic message hid
+      // validation failures that told the user exactly how to fix the input.
+      Alert.alert('Could not create task', getApiErrorMessage(error));
     }
-  }, [newTaskTitle, newTaskDescription, newTaskPriority, noticeId, createTask]);
+  }, [newTaskTitle, newTaskDescription, newTaskPriority, newTaskDueDate, noticeId, createTask]);
 
   const priorities: Array<{ value: 'low' | 'medium' | 'high' | 'critical'; label: string }> = [
     { value: 'low', label: 'Low' },
@@ -950,7 +1381,7 @@ function TasksTab({ tasks, noticeId }: { tasks: TaskDto[]; noticeId: string }) {
         onPress={() => setShowCreateModal(true)}
       >
         <Plus size={18} color={COLORS.primary} />
-        <Text style={styles.addTaskButtonText}>Add Task</Text>
+        <Text style={styles.addTaskButtonText}>{t('noticeDetail.addTask')}</Text>
       </TouchableOpacity>
 
       {tasks.length === 0 ? (
@@ -989,12 +1420,9 @@ function TasksTab({ tasks, noticeId }: { tasks: TaskDto[]; noticeId: string }) {
                 </View>
               </View>
               <View
-                style={[
-                  styles.statusBadge,
-                  { backgroundColor: STATUS_COLORS[task.status] || COLORS.gray[400] },
-                ]}
+                style={[styles.statusBadge, { backgroundColor: taskStatusColor(task.status) }]}
               >
-                <Text style={styles.statusText}>{task.status.replace('_', ' ')}</Text>
+                <Text style={styles.statusText}>{taskStatusLabel(task.status)}</Text>
               </View>
             </View>
           ))}
@@ -1009,29 +1437,30 @@ function TasksTab({ tasks, noticeId }: { tasks: TaskDto[]; noticeId: string }) {
         onRequestClose={() => setShowCreateModal(false)}
       >
         <KeyboardAvoidingView
-          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+          behavior={Platform.OS === 'ios' ? 'padding' : undefined}
           style={styles.modalOverlay}
         >
           <View style={styles.createTaskModal}>
             <View style={styles.createTaskHeader}>
-              <Text style={styles.createTaskTitle}>Create Task</Text>
+              <Text style={styles.createTaskTitle}>{t('noticeDetail.createTask')}</Text>
               <TouchableOpacity onPress={() => setShowCreateModal(false)}>
                 <X size={24} color={COLORS.gray[500]} />
               </TouchableOpacity>
             </View>
 
             <TextInput
-              style={styles.taskTitleInput}
-              placeholder="Task title"
+              style={[styles.taskTitleInput, titleError && styles.taskTitleInputError]}
+              placeholder={t('noticeDetail.taskTitle')}
               placeholderTextColor={COLORS.gray[400]}
               value={newTaskTitle}
               onChangeText={setNewTaskTitle}
-              maxLength={200}
+              maxLength={TASK_TITLE_MAX}
             />
+            {titleError && <Text style={styles.taskTitleError}>{titleError}</Text>}
 
             <TextInput
               style={styles.taskDescriptionInput}
-              placeholder="Description (optional)"
+              placeholder={t('noticeDetail.descriptionOptional')}
               placeholderTextColor={COLORS.gray[400]}
               value={newTaskDescription}
               onChangeText={setNewTaskDescription}
@@ -1040,7 +1469,7 @@ function TasksTab({ tasks, noticeId }: { tasks: TaskDto[]; noticeId: string }) {
               maxLength={2000}
             />
 
-            <Text style={styles.priorityLabel}>Priority</Text>
+            <Text style={styles.priorityLabel}>{t('noticeDetail.priority')}</Text>
             <View style={styles.prioritySelector}>
               {priorities.map((p) => (
                 <TouchableOpacity
@@ -1067,20 +1496,42 @@ function TasksTab({ tasks, noticeId }: { tasks: TaskDto[]; noticeId: string }) {
               ))}
             </View>
 
+            <Text style={styles.priorityLabel}>{t('noticeDetail.dueDate')}</Text>
+            <TouchableOpacity
+              style={styles.dueDateField}
+              onPress={() => setShowDuePicker(true)}
+              accessibilityRole="button"
+              accessibilityLabel={
+                newTaskDueDate
+                  ? `Due ${formatDueDate(newTaskDueDate)}. Change due date`
+                  : 'Set a due date'
+              }
+            >
+              <Clock size={16} color={COLORS.gray[500]} />
+              <Text
+                style={[
+                  styles.dueDateFieldText,
+                  !newTaskDueDate && styles.dueDateFieldPlaceholder,
+                ]}
+              >
+                {formatDueDate(newTaskDueDate) ?? 'No due date'}
+              </Text>
+            </TouchableOpacity>
+
             <View style={styles.createTaskActions}>
               <TouchableOpacity
                 style={styles.createTaskCancelButton}
                 onPress={() => setShowCreateModal(false)}
               >
-                <Text style={styles.createTaskCancelText}>Cancel</Text>
+                <Text style={styles.createTaskCancelText}>{t('noticeDetail.cancel')}</Text>
               </TouchableOpacity>
               <TouchableOpacity
                 style={[
                   styles.createTaskSubmitButton,
-                  (!newTaskTitle.trim() || createTask.isPending) && styles.createTaskSubmitDisabled,
+                  !canSubmitTask && styles.createTaskSubmitDisabled,
                 ]}
                 onPress={handleCreateTask}
-                disabled={!newTaskTitle.trim() || createTask.isPending}
+                disabled={!canSubmitTask}
               >
                 <Text style={styles.createTaskSubmitText}>
                   {createTask.isPending ? 'Creating...' : 'Create Task'}
@@ -1088,6 +1539,20 @@ function TasksTab({ tasks, noticeId }: { tasks: TaskDto[]; noticeId: string }) {
               </TouchableOpacity>
             </View>
           </View>
+
+          {/*
+            Nested INSIDE the create modal on purpose. iOS presents only one
+            modal at a time, so a sibling <Modal> opened while this one is up
+            never appears — the picker silently did nothing and the due date
+            stayed unset (TC-MOB-044).
+          */}
+          <DatePickerSheet
+            visible={showDuePicker}
+            value={newTaskDueDate}
+            disablePast
+            onClose={() => setShowDuePicker(false)}
+            onSelect={setNewTaskDueDate}
+          />
         </KeyboardAvoidingView>
       </Modal>
     </View>
@@ -1096,6 +1561,9 @@ function TasksTab({ tasks, noticeId }: { tasks: TaskDto[]; noticeId: string }) {
 
 // Comments Tab
 function CommentsTab({ comments, noticeId }: { comments: CommentResponseDto[]; noticeId: string }) {
+  const { t } = useTranslation();
+  const styles = useThemedStyles(createStyles);
+  const COLORS = useColors();
   const [newComment, setNewComment] = useState('');
   const [visibility, setVisibility] = useState<CommentVisibility>('internal');
   const createComment = useCreateComment();
@@ -1113,7 +1581,7 @@ function CommentsTab({ comments, noticeId }: { comments: CommentResponseDto[]; n
       });
       setNewComment('');
     } catch (error) {
-      Alert.alert('Error', 'Failed to post comment. Please try again.');
+      Alert.alert(t('noticeDetail.error'), t('noticeDetail.failedToPostCommentPleaseTryAgain'));
     }
   }, [newComment, noticeId, createComment, visibility]);
 
@@ -1155,8 +1623,8 @@ function CommentsTab({ comments, noticeId }: { comments: CommentResponseDto[]; n
     <View style={styles.commentsContainer}>
       {comments.length === 0 ? (
         <EmptyState
-          title="No Comments Yet"
-          message="Start the conversation by adding a comment."
+          title={t('noticeDetail.noCommentsYet')}
+          message={t('noticeDetail.startTheConversationByAddingAComment')}
           icon={<MessageSquare size={48} color={COLORS.gray[400]} />}
         />
       ) : (
@@ -1243,7 +1711,7 @@ function CommentsTab({ comments, noticeId }: { comments: CommentResponseDto[]; n
         <View style={styles.commentInputContainer}>
           <TextInput
             style={styles.commentInput}
-            placeholder="Write a comment... Use @ to mention"
+            placeholder={t('noticeDetail.writeACommentUseToMention')}
             placeholderTextColor={COLORS.gray[400]}
             value={newComment}
             onChangeText={setNewComment}
@@ -1276,6 +1744,9 @@ function DocumentRequestsTab({
   summary?: { total: number; pending: number; submitted: number; fulfilled: number; overdue: number };
   noticeId: string;
 }) {
+  const { t } = useTranslation();
+  const styles = useThemedStyles(createStyles);
+  const COLORS = useColors();
   const [selectedRequest, setSelectedRequest] = useState<DocumentRequestDto | null>(null);
   const [showUploadModal, setShowUploadModal] = useState(false);
   const [uploadNote, setUploadNote] = useState('');
@@ -1302,19 +1773,19 @@ function DocumentRequestsTab({
           },
           {
             onSuccess: () => {
-              Alert.alert('Success', 'Document uploaded successfully');
+              Alert.alert(t('noticeDetail.success'), t('noticeDetail.documentUploadedSuccessfully'));
               setShowUploadModal(false);
               setSelectedRequest(null);
               setUploadNote('');
             },
             onError: (error) => {
-              Alert.alert('Error', error.message || 'Failed to upload document');
+              Alert.alert(t('noticeDetail.error'), error.message || 'Failed to upload document');
             },
           }
         );
       }
     } catch (error) {
-      Alert.alert('Error', 'Failed to pick document');
+      Alert.alert(t('noticeDetail.error'), t('noticeDetail.failedToPickDocument'));
     }
   };
 
@@ -1353,8 +1824,8 @@ function DocumentRequestsTab({
   if (requests.length === 0) {
     return (
       <EmptyState
-        title="No Document Requests"
-        message="No documents have been requested for this notice."
+        title={t('noticeDetail.noDocumentRequests')}
+        message={t('noticeDetail.noDocumentsHaveBeenRequestedForThisNotic')}
         icon={<FileText size={48} color={COLORS.gray[400]} />}
       />
     );
@@ -1404,7 +1875,7 @@ function DocumentRequestsTab({
             {request.isOverdue && (
               <View style={styles.overdueTag}>
                 <AlertCircle size={12} color={COLORS.error} />
-                <Text style={styles.overdueText}>Overdue</Text>
+                <Text style={styles.overdueText}>{t('noticeDetail.overdue')}</Text>
               </View>
             )}
           </View>
@@ -1436,7 +1907,7 @@ function DocumentRequestsTab({
 
           {(request.status === 'pending' || request.status === 'resubmit_needed') && (
             <View style={styles.docRequestAction}>
-              <Text style={styles.docRequestActionText}>Tap to upload document</Text>
+              <Text style={styles.docRequestActionText}>{t('noticeDetail.tapToUploadDocument')}</Text>
               <ChevronRight size={16} color={COLORS.primary} />
             </View>
           )}
@@ -1451,12 +1922,12 @@ function DocumentRequestsTab({
         onRequestClose={() => setShowUploadModal(false)}
       >
         <KeyboardAvoidingView
-          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+          behavior={Platform.OS === 'ios' ? 'padding' : undefined}
           style={styles.modalOverlay}
         >
           <View style={styles.uploadModal}>
             <View style={styles.uploadModalHeader}>
-              <Text style={styles.modalTitle}>Upload Document</Text>
+              <Text style={styles.modalTitle}>{t('noticeDetail.uploadDocument')}</Text>
               <TouchableOpacity onPress={() => setShowUploadModal(false)}>
                 <X size={24} color={COLORS.gray[500]} />
               </TouchableOpacity>
@@ -1475,7 +1946,7 @@ function DocumentRequestsTab({
 
                 <TextInput
                   style={styles.uploadNote}
-                  placeholder="Add a note (optional)"
+                  placeholder={t('noticeDetail.addANoteOptional')}
                   placeholderTextColor={COLORS.gray[400]}
                   value={uploadNote}
                   onChangeText={setUploadNote}
@@ -1493,7 +1964,7 @@ function DocumentRequestsTab({
                   ) : (
                     <>
                       <Download size={20} color={COLORS.white} />
-                      <Text style={styles.uploadButtonText}>Select & Upload Document</Text>
+                      <Text style={styles.uploadButtonText}>{t('noticeDetail.selectUploadDocument')}</Text>
                     </>
                   )}
                 </TouchableOpacity>
@@ -1504,7 +1975,7 @@ function DocumentRequestsTab({
               style={styles.uploadCancelButton}
               onPress={() => setShowUploadModal(false)}
             >
-              <Text style={styles.uploadCancelText}>Cancel</Text>
+              <Text style={styles.uploadCancelText}>{t('noticeDetail.cancel')}</Text>
             </TouchableOpacity>
           </View>
         </KeyboardAvoidingView>
@@ -1523,6 +1994,9 @@ function ActivityTab({
   hasMore: boolean;
   onLoadMore?: () => void;
 }) {
+  const { t } = useTranslation();
+  const styles = useThemedStyles(createStyles);
+  const COLORS = useColors();
   const getActivityIcon = (type: string) => {
     switch (type) {
       case 'notice_created':
@@ -1579,8 +2053,8 @@ function ActivityTab({
   if (activities.length === 0) {
     return (
       <EmptyState
-        title="No Activity Yet"
-        message="Activity history will appear here as actions are taken on this notice."
+        title={t('noticeDetail.noActivityYet')}
+        message={t('noticeDetail.activityHistoryWillAppearHereAsActionsAr')}
         icon={<Clock size={48} color={COLORS.gray[400]} />}
       />
     );
@@ -1612,7 +2086,7 @@ function ActivityTab({
 
       {hasMore && onLoadMore && (
         <TouchableOpacity style={styles.loadMoreButton} onPress={onLoadMore}>
-          <Text style={styles.loadMoreText}>Load More</Text>
+          <Text style={styles.loadMoreText}>{t('noticeDetail.loadMore')}</Text>
         </TouchableOpacity>
       )}
     </View>
@@ -1621,6 +2095,7 @@ function ActivityTab({
 
 // Info Row Component
 function InfoRow({ label, value }: { label: string; value?: string | null }) {
+  const styles = useThemedStyles(createStyles);
   return (
     <View style={styles.infoRow}>
       <Text style={styles.infoLabel}>{label}</Text>
@@ -1629,7 +2104,8 @@ function InfoRow({ label, value }: { label: string; value?: string | null }) {
   );
 }
 
-const styles = StyleSheet.create({
+const createStyles = (COLORS: Palette) =>
+  StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: COLORS.gray[50],
@@ -1658,6 +2134,19 @@ const styles = StyleSheet.create({
     fontSize: FONT_SIZES.sm,
     color: COLORS.gray[500],
     marginTop: 2,
+  },
+  headerActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: SPACING.sm,
+  },
+  shareButton: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: COLORS.gray[100],
   },
   riskBadge: {
     paddingHorizontal: SPACING.sm,
@@ -1709,6 +2198,27 @@ const styles = StyleSheet.create({
     width: 1,
     backgroundColor: COLORS.gray[200],
     marginHorizontal: SPACING.md,
+  },
+  currentStatusBadge: {
+    alignSelf: 'flex-start',
+    paddingHorizontal: SPACING.md,
+    paddingVertical: 6,
+    borderRadius: BORDER_RADIUS.full,
+  },
+  workflowHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: SPACING.sm,
+  },
+  workflowChangeHint: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  workflowChangeText: {
+    fontSize: FONT_SIZES.sm,
+    fontWeight: '500',
+    color: COLORS.primary,
   },
   workflowSection: {
     backgroundColor: COLORS.white,
@@ -1769,18 +2279,24 @@ const styles = StyleSheet.create({
   stageConnectorActive: {
     backgroundColor: COLORS.success,
   },
-  tabContainer: {
-    flexDirection: 'row',
+  tabBar: {
     backgroundColor: COLORS.white,
-    paddingHorizontal: SPACING.md,
     marginTop: SPACING.sm,
     borderBottomWidth: 1,
     borderBottomColor: COLORS.gray[200],
+  },
+
+  tabContainer: {
+    flexDirection: 'row',
+    paddingHorizontal: SPACING.md,
   },
   tab: {
     paddingVertical: SPACING.md,
     paddingHorizontal: SPACING.sm,
     marginRight: SPACING.md,
+    // Without this the row still tries to fit the screen and squeezes the
+    // labels, which is what truncated "Comments" to "C".
+    flexShrink: 0,
   },
   tabActive: {
     borderBottomWidth: 2,
@@ -1858,6 +2374,25 @@ const styles = StyleSheet.create({
   tagText: {
     fontSize: FONT_SIZES.sm,
     color: COLORS.gray[600],
+  },
+  analysisRiskRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: SPACING.md,
+    marginBottom: SPACING.sm,
+  },
+  analysisMeta: {
+    fontSize: FONT_SIZES.sm,
+    color: COLORS.gray[600],
+  },
+  analysisDeadlineRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: SPACING.xs,
+  },
+  analysisDeadline: {
+    fontSize: FONT_SIZES.sm,
+    fontWeight: '500',
   },
   analysisSection: {
     marginBottom: SPACING.lg,
@@ -2219,6 +2754,35 @@ const styles = StyleSheet.create({
   priorityOptionTextActive: {
     color: COLORS.white,
   },
+  taskTitleInputError: {
+    borderColor: COLORS.error,
+  },
+  taskTitleError: {
+    fontSize: FONT_SIZES.sm,
+    color: COLORS.error,
+    marginTop: SPACING.xs,
+  },
+  dueDateField: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: SPACING.sm,
+    borderWidth: 1,
+    borderColor: COLORS.gray[300],
+    borderRadius: BORDER_RADIUS.md,
+    paddingHorizontal: SPACING.md,
+    paddingVertical: SPACING.md,
+    marginTop: SPACING.sm,
+    // Matches the gap the priority row leaves above, so the action buttons do
+    // not sit flush against the field.
+    marginBottom: SPACING.lg,
+  },
+  dueDateFieldText: {
+    fontSize: FONT_SIZES.md,
+    color: COLORS.gray[900],
+  },
+  dueDateFieldPlaceholder: {
+    color: COLORS.gray[400],
+  },
   createTaskActions: {
     flexDirection: 'row',
     gap: SPACING.md,
@@ -2276,6 +2840,10 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
     borderBottomColor: COLORS.gray[100],
     gap: SPACING.md,
+  },
+  pinButton: {
+    marginLeft: SPACING.md,
+    padding: 2,
   },
   attachmentIcon: {
     width: 40,

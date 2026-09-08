@@ -5,8 +5,10 @@
 
 import React from 'react';
 import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
-import { COLORS, SPACING, FONT_SIZES, BORDER_RADIUS } from '../../utils/constants';
+import { SPACING, FONT_SIZES, BORDER_RADIUS } from '../../utils/constants';
 import { BillingCycle } from '../../types';
+import { useColors, useThemedStyles } from '../../theme/useTheme';
+import type { Palette } from '../../theme/palettes';
 
 interface BillingToggleProps {
   value: BillingCycle;
@@ -15,6 +17,7 @@ interface BillingToggleProps {
 }
 
 export function BillingToggle({ value, onChange, annualDiscount }: BillingToggleProps) {
+  const styles = useThemedStyles(createStyles);
   return (
     <View style={styles.container}>
       <View style={styles.toggleContainer}>
@@ -47,7 +50,8 @@ export function BillingToggle({ value, onChange, annualDiscount }: BillingToggle
   );
 }
 
-const styles = StyleSheet.create({
+const createStyles = (COLORS: Palette) =>
+  StyleSheet.create({
   container: {
     alignItems: 'center',
     marginVertical: SPACING.md,

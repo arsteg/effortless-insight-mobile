@@ -2,13 +2,16 @@
  * Tab Navigation Layout
  */
 
-import { Tabs } from 'expo-router';
-import { View, Text, StyleSheet } from 'react-native';
-import { Home, FileText, Camera, CheckSquare, Bell, User } from 'lucide-react-native';
-import { COLORS, SPACING, FONT_SIZES, BORDER_RADIUS } from '../../src/utils/constants';
+import { Tabs, useRouter } from 'expo-router';
+import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
+import { Home, FileText, Camera, CheckSquare, Bell, User, CalendarDays } from 'lucide-react-native';
+import { SPACING, FONT_SIZES, BORDER_RADIUS } from '../../src/utils/constants';
 import { useUnreadCount } from '../../src/hooks/useNotifications';
+import { useColors, useThemedStyles } from '../../src/theme/useTheme';
+import type { Palette } from '../../src/theme/palettes';
 
 function NotificationTabIcon({ color, size }: { color: string; size: number }) {
+  const styles = useThemedStyles(createStyles);
   const { data } = useUnreadCount();
   const count = data?.unreadCount ?? 0;
 
@@ -26,7 +29,27 @@ function NotificationTabIcon({ color, size }: { color: string; size: number }) {
   );
 }
 
+function CalendarHeaderButton() {
+  const styles = useThemedStyles(createStyles);
+  const COLORS = useColors();
+  const router = useRouter();
+
+  return (
+    <TouchableOpacity
+      onPress={() => router.push('/calendar')}
+      style={styles.headerButton}
+      accessibilityRole="button"
+      accessibilityLabel="Open deadline calendar"
+      hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+    >
+      <CalendarDays color={COLORS.white} size={22} />
+    </TouchableOpacity>
+  );
+}
+
 export default function TabLayout() {
+  const styles = useThemedStyles(createStyles);
+  const COLORS = useColors();
   return (
     <Tabs
       screenOptions={{
@@ -88,6 +111,10 @@ export default function TabLayout() {
           title: 'Tasks',
           tabBarIcon: ({ color, size }) => <CheckSquare color={color} size={size} />,
           headerTitle: 'My Tasks',
+          // The calendar lives here rather than as a seventh tab: it shows the
+          // deadlines of these tasks (and of notices), and seven tabs does not
+          // fit a phone's bottom bar (TC-MOB-047).
+          headerRight: () => <CalendarHeaderButton />,
         }}
       />
       <Tabs.Screen
@@ -112,7 +139,11 @@ export default function TabLayout() {
   );
 }
 
-const styles = StyleSheet.create({
+const createStyles = (COLORS: Palette) =>
+  StyleSheet.create({
+  headerButton: {
+    marginRight: SPACING.md,
+  },
   scanButton: {
     width: 56,
     height: 56,

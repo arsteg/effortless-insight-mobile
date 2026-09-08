@@ -5,7 +5,7 @@
 
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { STORAGE_KEYS, CACHE_CONFIG } from '../../utils/constants';
-import { NoticeDto, MyTaskDto } from '../../types';
+import { NoticeDto, MyTaskDto, NoticeDetailDto } from '../../types';
 
 interface CacheEntry<T> {
   data: T;
@@ -23,6 +23,24 @@ async function setCache<T>(key: string, data: T, durationMs: number): Promise<vo
     expiresAt: Date.now() + durationMs,
   };
   await AsyncStorage.setItem(key, JSON.stringify(entry));
+}
+
+/**
+ * When an entry was written, or null when absent or expired. Lets the UI say
+ * how old the data on screen is instead of presenting it as current
+ * (TC-MOB-056).
+ */
+async function getCacheAge(key: string): Promise<number | null> {
+  const json = await AsyncStorage.getItem(key);
+  if (!json) return null;
+
+  try {
+    const entry = JSON.parse(json) as CacheEntry<unknown>;
+    if (Date.now() > entry.expiresAt) return null;
+    return entry.cachedAt;
+  } catch {
+    return null;
+  }
 }
 
 /**
@@ -59,6 +77,39 @@ export async function cacheNotices(notices: NoticeDto[]): Promise<void> {
  */
 export async function getCachedNotices(): Promise<NoticeDto[] | null> {
   return getCache<NoticeDto[]>(STORAGE_KEYS.CACHED_NOTICES);
+}
+
+/** Per-notice key. Details are cached individually, unlike the list. */
+function noticeDetailKey(noticeId: string): string {
+  return `${STORAGE_KEYS.CACHED_NOTICE_DETAIL_PREFIX}${noticeId}`;
+}
+
+/**
+ * Cache one notice's full detail.
+ *
+ * The list cache holds `NoticeDto` rows, which the detail screen cannot render
+ * — it needs the analysis, attachments, workflow and tasks that only
+ * `NoticeDetailDto` carries. Storing them separately is what makes a
+ * previously-viewed notice readable offline (TC-MOB-056).
+ */
+export async function cacheNoticeDetail(notice: NoticeDetailDto): Promise<void> {
+  await setCache(noticeDetailKey(notice.id), notice, CACHE_CONFIG.NOTICE_CACHE_DURATION);
+}
+
+export async function getCachedNoticeDetail(
+  noticeId: string
+): Promise<NoticeDetailDto | null> {
+  return getCache<NoticeDetailDto>(noticeDetailKey(noticeId));
+}
+
+/** When this notice's detail was last fetched, for the staleness label. */
+export async function getCachedNoticeDetailAge(noticeId: string): Promise<number | null> {
+  return getCacheAge(noticeDetailKey(noticeId));
+}
+
+/** When the notices list was last fetched. */
+export async function getCachedNoticesAge(): Promise<number | null> {
+  return getCacheAge(STORAGE_KEYS.CACHED_NOTICES);
 }
 
 /**

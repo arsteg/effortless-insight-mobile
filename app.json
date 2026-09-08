@@ -81,6 +81,18 @@
             "useFrameworks": "static"
           }
         }
+      ],
+      "./plugins/withRNFirebaseDisableSPM",
+      [
+        "expo-quick-actions",
+        {
+          "androidIcons": {
+            "scan_icon": {
+              "foregroundImage": "./assets/notification-icon.png",
+              "backgroundColor": "#0ea5e9"
+            }
+          }
+        }
       ]
     ],
     "experiments": {

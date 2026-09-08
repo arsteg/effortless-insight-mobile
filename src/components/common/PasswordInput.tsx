@@ -13,7 +13,9 @@ import {
   TextInputProps,
 } from 'react-native';
 import { Eye, EyeOff, Lock } from 'lucide-react-native';
-import { COLORS, SPACING, FONT_SIZES, BORDER_RADIUS } from '../../utils/constants';
+import { SPACING, FONT_SIZES, BORDER_RADIUS } from '../../utils/constants';
+import { useColors, useThemedStyles } from '../../theme/useTheme';
+import type { Palette } from '../../theme/palettes';
 
 interface PasswordInputProps extends Omit<TextInputProps, 'secureTextEntry'> {
   label?: string;
@@ -28,6 +30,8 @@ export function PasswordInput({
   style,
   ...props
 }: PasswordInputProps) {
+  const styles = useThemedStyles(createStyles);
+  const COLORS = useColors();
   const [isVisible, setIsVisible] = useState(false);
 
   return (
@@ -61,7 +65,8 @@ export function PasswordInput({
   );
 }
 
-const styles = StyleSheet.create({
+const createStyles = (COLORS: Palette) =>
+  StyleSheet.create({
   container: {
     gap: SPACING.xs,
   },

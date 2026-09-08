@@ -31,7 +31,10 @@ import {
   useTriggerSync,
 } from '../../src/hooks/useGstn';
 import { getStatusLabel, canSync } from '../../src/types';
-import { COLORS, SPACING, FONT_SIZES, BORDER_RADIUS } from '../../src/utils/constants';
+import { SPACING, FONT_SIZES, BORDER_RADIUS } from '../../src/utils/constants';
+import { useColors, useThemedStyles } from '../../src/theme/useTheme';
+import type { Palette } from '../../src/theme/palettes';
+import { useTranslation } from '../../src/hooks';
 
 const SYNC_INTERVAL_OPTIONS = [
   { value: 1, label: 'Every hour' },
@@ -43,6 +46,9 @@ const SYNC_INTERVAL_OPTIONS = [
 ];
 
 export default function GstnSettingsScreen() {
+  const { t } = useTranslation();
+  const styles = useThemedStyles(createStyles);
+  const COLORS = useColors();
   const router = useRouter();
   const params = useLocalSearchParams<{
     gstinId: string;
@@ -147,7 +153,7 @@ export default function GstnSettingsScreen() {
                 {updateSettings.isPending ? (
                   <ActivityIndicator size="small" color={COLORS.white} />
                 ) : (
-                  <Text style={styles.saveButtonText}>Save</Text>
+                  <Text style={styles.saveButtonText}>{t('settings.save')}</Text>
                 )}
               </TouchableOpacity>
             ) : null,
@@ -174,13 +180,13 @@ export default function GstnSettingsScreen() {
 
         {/* Auto-Sync Settings */}
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Auto-Sync Settings</Text>
+          <Text style={styles.sectionTitle}>{t('settings.autoSyncSettings')}</Text>
 
           <View style={styles.settingRow}>
             <View style={styles.settingInfo}>
               <Zap size={20} color={COLORS.primary} />
               <View style={styles.settingText}>
-                <Text style={styles.settingLabel}>Auto-Sync Enabled</Text>
+                <Text style={styles.settingLabel}>{t('settings.autoSyncEnabled')}</Text>
                 <Text style={styles.settingDescription}>
                   Automatically fetch new notices from the GST Portal
                 </Text>
@@ -198,7 +204,7 @@ export default function GstnSettingsScreen() {
             <View style={styles.intervalSection}>
               <View style={styles.intervalHeader}>
                 <Clock size={16} color={COLORS.gray[500]} />
-                <Text style={styles.intervalLabel}>Sync Interval</Text>
+                <Text style={styles.intervalLabel}>{t('settings.syncInterval')}</Text>
               </View>
               <View style={styles.intervalOptions}>
                 {SYNC_INTERVAL_OPTIONS.map((option) => (
@@ -228,12 +234,12 @@ export default function GstnSettingsScreen() {
         {/* Connection Info */}
         {connection?.isConnected && (
           <View style={styles.section}>
-            <Text style={styles.sectionTitle}>Connection Info</Text>
+            <Text style={styles.sectionTitle}>{t('settings.connectionInfo')}</Text>
 
             <View style={styles.infoCard}>
               {connection.connectedAt && (
                 <View style={styles.infoRow}>
-                  <Text style={styles.infoLabel}>Connected</Text>
+                  <Text style={styles.infoLabel}>{t('settings.connected')}</Text>
                   <Text style={styles.infoValue}>
                     {format(new Date(connection.connectedAt), 'MMM d, yyyy')}
                   </Text>
@@ -242,7 +248,7 @@ export default function GstnSettingsScreen() {
 
               {connection.lastSyncAt && (
                 <View style={styles.infoRow}>
-                  <Text style={styles.infoLabel}>Last Synced</Text>
+                  <Text style={styles.infoLabel}>{t('settings.lastSynced')}</Text>
                   <Text style={styles.infoValue}>
                     {formatDistanceToNow(new Date(connection.lastSyncAt), { addSuffix: true })}
                   </Text>
@@ -251,7 +257,7 @@ export default function GstnSettingsScreen() {
 
               {connection.nextScheduledSyncAt && autoSyncEnabled && (
                 <View style={styles.infoRow}>
-                  <Text style={styles.infoLabel}>Next Sync</Text>
+                  <Text style={styles.infoLabel}>{t('settings.nextSync')}</Text>
                   <Text style={styles.infoValue}>
                     {formatDistanceToNow(new Date(connection.nextScheduledSyncAt), {
                       addSuffix: true,
@@ -262,7 +268,7 @@ export default function GstnSettingsScreen() {
 
               {connection.connectedByName && (
                 <View style={styles.infoRow}>
-                  <Text style={styles.infoLabel}>Connected By</Text>
+                  <Text style={styles.infoLabel}>{t('settings.connectedBy')}</Text>
                   <Text style={styles.infoValue}>{connection.connectedByName}</Text>
                 </View>
               )}
@@ -272,7 +278,7 @@ export default function GstnSettingsScreen() {
 
         {/* Actions */}
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Actions</Text>
+          <Text style={styles.sectionTitle}>{t('settings.actions')}</Text>
 
           <TouchableOpacity
             style={[
@@ -291,7 +297,7 @@ export default function GstnSettingsScreen() {
               <RefreshCw size={20} color={COLORS.primary} />
             )}
             <View style={styles.actionButtonContent}>
-              <Text style={styles.actionButtonLabel}>Sync Now</Text>
+              <Text style={styles.actionButtonLabel}>{t('settings.syncNow')}</Text>
               <Text style={styles.actionButtonDescription}>
                 Manually fetch notices from the GST Portal
               </Text>
@@ -309,7 +315,7 @@ export default function GstnSettingsScreen() {
               <Link2Off size={20} color={COLORS.error} />
             )}
             <View style={styles.actionButtonContent}>
-              <Text style={[styles.actionButtonLabel, { color: COLORS.error }]}>Disconnect</Text>
+              <Text style={[styles.actionButtonLabel, { color: COLORS.error }]}>{t('settings.disconnect')}</Text>
               <Text style={styles.actionButtonDescription}>
                 Stop automatic notice fetching
               </Text>
@@ -322,7 +328,7 @@ export default function GstnSettingsScreen() {
           <View style={styles.errorBanner}>
             <AlertCircle size={20} color={COLORS.error} />
             <View style={styles.errorContent}>
-              <Text style={styles.errorTitle}>Last Sync Failed</Text>
+              <Text style={styles.errorTitle}>{t('settings.lastSyncFailed')}</Text>
               <Text style={styles.errorMessage}>{connection.lastSyncError}</Text>
             </View>
           </View>
@@ -334,7 +340,8 @@ export default function GstnSettingsScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+const createStyles = (COLORS: Palette) =>
+  StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: COLORS.gray[100],

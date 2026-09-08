@@ -34,7 +34,7 @@ interface OfflineState {
   // Actions
   loadQueueStatus: () => Promise<void>;
   loadCacheStatus: () => Promise<void>;
-  syncQueue: () => Promise<{ processed: number; failed: number }>;
+  syncQueue: () => Promise<{ processed: number; failed: number; conflicts: number }>;
   queueAction: (type: QueuedActionType, payload: Record<string, unknown>) => Promise<string>;
   clearFailedFromQueue: () => Promise<void>;
   clearAllQueue: () => Promise<void>;
@@ -96,14 +96,18 @@ export const useOfflineStore = create<OfflineState>((set, get) => ({
       // Refresh queue status
       await get().loadQueueStatus();
 
-      return { processed: result.processed, failed: result.failed };
+      return {
+        processed: result.processed,
+        failed: result.failed,
+        conflicts: result.conflicts,
+      };
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Sync failed';
       set({
         isSyncing: false,
         syncError: errorMessage,
       });
-      return { processed: 0, failed: 0 };
+      return { processed: 0, failed: 0, conflicts: 0 };
     }
   },
 

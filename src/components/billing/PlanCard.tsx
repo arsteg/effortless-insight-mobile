@@ -6,9 +6,11 @@
 import React from 'react';
 import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
 import { Check, Star } from 'lucide-react-native';
-import { COLORS, SPACING, FONT_SIZES, BORDER_RADIUS } from '../../utils/constants';
+import { SPACING, FONT_SIZES, BORDER_RADIUS } from '../../utils/constants';
 import { PlanDto, BillingCycle } from '../../types';
 import { formatAmount } from '../../hooks/useBilling';
+import { useColors, useThemedStyles } from '../../theme/useTheme';
+import type { Palette } from '../../theme/palettes';
 
 interface PlanCardProps {
   plan: PlanDto;
@@ -25,6 +27,8 @@ export function PlanCard({
   onSelect,
   isLoading = false,
 }: PlanCardProps) {
+  const styles = useThemedStyles(createStyles);
+  const COLORS = useColors();
   const price = billingCycle === 'monthly' ? plan.pricing.monthly : plan.pricing.annually;
   const priceLabel = billingCycle === 'monthly' ? '/mo' : '/yr';
 
@@ -160,6 +164,7 @@ function LimitItem({
   value: number;
   suffix?: string;
 }) {
+  const styles = useThemedStyles(createStyles);
   // 0 or very high numbers (>= 10000) typically mean unlimited
   const isUnlimited = value === 0 || value >= 10000;
   return (
@@ -172,7 +177,8 @@ function LimitItem({
   );
 }
 
-const styles = StyleSheet.create({
+const createStyles = (COLORS: Palette) =>
+  StyleSheet.create({
   container: {
     backgroundColor: COLORS.white,
     borderRadius: BORDER_RADIUS.lg,

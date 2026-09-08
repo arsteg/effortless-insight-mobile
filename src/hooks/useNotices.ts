@@ -5,7 +5,13 @@
 
 import { useQuery, useMutation, useQueryClient, useInfiniteQuery } from '@tanstack/react-query';
 import { noticesApi } from '../services/api';
-import { cacheNotices, getCachedNotices } from '../services/storage/cache';
+import { useState, useEffect } from 'react';
+import {
+  cacheNotices,
+  getCachedNotices,
+  cacheNoticeDetail,
+  getCachedNoticeDetail,
+} from '../services/storage/cache';
 import { useUIStore } from '../stores';
 import {
   NoticeQueryParams,
@@ -120,7 +126,21 @@ export function useNotices(params: NoticeQueryParams = {}) {
 export function useNotice(noticeId: string, enabled = true) {
   return useQuery({
     queryKey: noticeKeys.detail(noticeId),
-    queryFn: () => noticesApi.getNotice(noticeId),
+    queryFn: async () => {
+      try {
+        const notice = await noticesApi.getNotice(noticeId);
+        await cacheNoticeDetail(notice);
+        return notice;
+      } catch (error) {
+        // Fall back to the stored copy, mirroring the list hooks. Without this
+        // a notice viewed earlier was unreadable offline as soon as React
+        // Query's 5-minute in-memory cache expired or the app restarted
+        // (TC-MOB-056).
+        const cached = await getCachedNoticeDetail(noticeId);
+        if (cached) return cached;
+        throw error;
+      }
+    },
     enabled: enabled && !!noticeId,
   });
 }
@@ -468,4 +488,27 @@ export function useAttachmentDownloadUrl() {
     mutationFn: ({ noticeId, attachmentId }: { noticeId: string; attachmentId: string }) =>
       noticesApi.getAttachmentDownloadUrl(noticeId, attachmentId),
   });
+}
+
+/**
+ * When the cached copy of this screen's data was written, or null when there
+ * is none. Re-read whenever connectivity changes, so going offline surfaces an
+ * accurate age rather than whatever was true at mount (TC-MOB-056).
+ */
+export function useCacheAge(load: () => Promise<number | null>, deps: unknown[] = []) {
+  const [cachedAt, setCachedAt] = useState<number | null>(null);
+  const isOnline = useUIStore((state) => state.isOnline);
+
+  useEffect(() => {
+    let cancelled = false;
+    void load().then((value) => {
+      if (!cancelled) setCachedAt(value);
+    });
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isOnline, ...deps]);
+
+  return cachedAt;
 }

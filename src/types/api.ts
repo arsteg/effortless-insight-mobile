@@ -57,7 +57,7 @@ export type ProcessingStatus =
   | 'completed'
   | 'failed';
 
-export type TaskStatus = 'todo' | 'in_progress' | 'done' | 'blocked' | 'on_hold' | 'archived';
+export type TaskStatus = 'todo' | 'in_progress' | 'done' | 'blocked' | 'on_hold' | 'archived' | 'cancelled';
 
 export type TaskPriority = 'critical' | 'high' | 'medium' | 'low';
 

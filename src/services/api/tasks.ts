@@ -268,7 +268,7 @@ export const tasksApi = {
     } as unknown as Blob);
     if (note) formData.append('note', note);
 
-    // Backend route is /fulfill (multipart: file + note) â€” there is no
+    // Backend route is /fulfill (multipart: file + note) — there is no
     // /submissions endpoint.
     const response = await apiClient.post<DocumentRequestDto>(
       `/document-requests/${requestId}/fulfill`,

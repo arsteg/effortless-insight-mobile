@@ -19,10 +19,16 @@ import { useMyTasks } from '../../src/hooks/useTasks';
 import { useCurrentSubscription } from '../../src/hooks/useBilling';
 import { useAuthStore } from '../../src/stores';
 import { LoadingSpinner, EmptyState } from '../../src/components/common';
-import { COLORS, SPACING, FONT_SIZES, BORDER_RADIUS, RISK_COLORS } from '../../src/utils/constants';
+import { SPACING, FONT_SIZES, BORDER_RADIUS, RISK_COLORS } from '../../src/utils/constants';
 import { format, differenceInDays } from 'date-fns';
+import { useColors, useThemedStyles } from '../../src/theme/useTheme';
+import type { Palette } from '../../src/theme/palettes';
+import { useTranslation } from '../../src/hooks';
 
 export default function DashboardScreen() {
+  const { t } = useTranslation();
+  const styles = useThemedStyles(createStyles);
+  const COLORS = useColors();
   const router = useRouter();
   const { user } = useAuthStore();
 
@@ -69,15 +75,15 @@ export default function DashboardScreen() {
   // Get greeting based on time
   const getGreeting = () => {
     const hour = new Date().getHours();
-    if (hour < 12) return 'Good Morning';
-    if (hour < 17) return 'Good Afternoon';
-    return 'Good Evening';
+    if (hour < 12) return t('dashboard.goodMorning');
+    if (hour < 17) return t('dashboard.goodAfternoon');
+    return t('dashboard.goodEvening');
   };
 
   const isLoading = statsLoading && noticesLoading && tasksLoading;
 
   if (isLoading) {
-    return <LoadingSpinner fullScreen message="Loading dashboard..." />;
+    return <LoadingSpinner fullScreen message={t('dashboard.loadingDashboard')} />;
   }
 
   const stats = statistics || {
@@ -109,9 +115,9 @@ export default function DashboardScreen() {
       {/* Greeting */}
       <View style={styles.greeting}>
         <Text style={styles.greetingText}>
-          {getGreeting()}, {user?.name?.split(' ')[0] || 'there'}!
+          {getGreeting()}, {user?.name?.split(' ')[0] || t('dashboard.there')}!
         </Text>
-        <Text style={styles.greetingSubtext}>Here's your compliance overview</Text>
+        <Text style={styles.greetingSubtext}>{t('dashboard.complianceOverview')}</Text>
       </View>
 
       {/* Critical Alert Banner */}
@@ -122,8 +128,12 @@ export default function DashboardScreen() {
         >
           <AlertCircle color="#dc2626" size={20} />
           <Text style={styles.alertText}>
-            {stats.overdueCount} notice{stats.overdueCount > 1 ? 's' : ''} overdue - requires
-            immediate attention
+            {t(
+              stats.overdueCount === 1
+                ? 'dashboard.overdueAlert'
+                : 'dashboard.overdueAlertPlural',
+              { count: stats.overdueCount }
+            )}
           </Text>
           <ChevronRight color="#dc2626" size={20} />
         </TouchableOpacity>
@@ -132,21 +142,21 @@ export default function DashboardScreen() {
       {/* Stats Grid */}
       <View style={styles.statsGrid}>
         <StatCard
-          label="Active"
+          label={t('dashboard.active')}
           value={activeCount}
           icon={<FileText size={20} color={COLORS.primary} />}
           color={COLORS.primary}
           onPress={() => router.push('/notices')}
         />
         <StatCard
-          label="Due Soon"
+          label={t('dashboard.dueSoon')}
           value={stats.dueThisWeek}
           icon={<Clock size={20} color={COLORS.warning} />}
           color={COLORS.warning}
           onPress={() => router.push('/notices?filter=due-soon')}
         />
         <StatCard
-          label="Overdue"
+          label={t('dashboard.overdue')}
           value={stats.overdueCount}
           icon={<AlertCircle size={20} color={COLORS.error} />}
           color={COLORS.error}
@@ -157,9 +167,9 @@ export default function DashboardScreen() {
       {/* Upcoming Deadlines */}
       <View style={styles.section}>
         <View style={styles.sectionHeader}>
-          <Text style={styles.sectionTitle}>Upcoming Deadlines</Text>
+          <Text style={styles.sectionTitle}>{t('dashboard.upcomingDeadlines')}</Text>
           <TouchableOpacity onPress={() => router.push('/notices')}>
-            <Text style={styles.sectionLink}>View All</Text>
+            <Text style={styles.sectionLink}>{t('common.viewAll')}</Text>
           </TouchableOpacity>
         </View>
 
@@ -170,7 +180,7 @@ export default function DashboardScreen() {
         ) : (
           <View style={styles.emptySection}>
             <CheckSquare size={32} color={COLORS.success} />
-            <Text style={styles.emptySectionText}>No urgent deadlines</Text>
+            <Text style={styles.emptySectionText}>{t('dashboard.noUrgentDeadlines')}</Text>
           </View>
         )}
       </View>
@@ -178,9 +188,9 @@ export default function DashboardScreen() {
       {/* My Tasks */}
       <View style={styles.section}>
         <View style={styles.sectionHeader}>
-          <Text style={styles.sectionTitle}>My Tasks This Week</Text>
+          <Text style={styles.sectionTitle}>{t('dashboard.myTasksThisWeek')}</Text>
           <TouchableOpacity onPress={() => router.push('/tasks')}>
-            <Text style={styles.sectionLink}>View All</Text>
+            <Text style={styles.sectionLink}>{t('common.viewAll')}</Text>
           </TouchableOpacity>
         </View>
 
@@ -191,7 +201,7 @@ export default function DashboardScreen() {
         ) : (
           <View style={styles.emptySection}>
             <CheckSquare size={32} color={COLORS.success} />
-            <Text style={styles.emptySectionText}>All tasks completed!</Text>
+            <Text style={styles.emptySectionText}>{t('dashboard.allTasksCompleted')}</Text>
           </View>
         )}
       </View>
@@ -200,9 +210,9 @@ export default function DashboardScreen() {
       {subscriptionData?.usage && (
         <View style={styles.section}>
           <View style={styles.sectionHeader}>
-            <Text style={styles.sectionTitle}>Usage</Text>
+            <Text style={styles.sectionTitle}>{t('dashboard.usage')}</Text>
             <TouchableOpacity onPress={() => router.push('/billing')}>
-              <Text style={styles.sectionLink}>View Plan</Text>
+              <Text style={styles.sectionLink}>{t('dashboard.viewPlan')}</Text>
             </TouchableOpacity>
           </View>
           <View style={styles.usageCard}>
@@ -229,20 +239,20 @@ export default function DashboardScreen() {
 
       {/* Quick Actions */}
       <View style={styles.section}>
-        <Text style={styles.sectionTitle}>Quick Actions</Text>
+        <Text style={styles.sectionTitle}>{t('dashboard.quickActions')}</Text>
         <View style={styles.quickActions}>
           <QuickActionButton
-            label="Upload Notice"
+            label={t('dashboard.uploadNotice')}
             icon={<FileText size={24} color={COLORS.primary} />}
             onPress={() => router.push('/upload')}
           />
           <QuickActionButton
-            label="View Tasks"
+            label={t('dashboard.viewTasks')}
             icon={<CheckSquare size={24} color={COLORS.primary} />}
             onPress={() => router.push('/tasks')}
           />
           <QuickActionButton
-            label="Subscription"
+            label={t('dashboard.subscription')}
             icon={<CreditCard size={24} color={COLORS.primary} />}
             onPress={() => router.push('/billing')}
           />
@@ -269,6 +279,7 @@ function StatCard({
   color: string;
   onPress: () => void;
 }) {
+  const styles = useThemedStyles(createStyles);
   return (
     <TouchableOpacity style={styles.statCard} onPress={onPress}>
       <View style={styles.statIcon}>{icon}</View>
@@ -286,6 +297,8 @@ function NoticeCard({
   notice: { id: string; noticeType?: string; daysRemaining?: number; taxAmount?: number; riskLevel?: string };
   onPress: () => void;
 }) {
+  const styles = useThemedStyles(createStyles);
+  const COLORS = useColors();
   const getRiskColor = (risk?: string) => {
     if (!risk) return COLORS.gray[400];
     return RISK_COLORS[risk as keyof typeof RISK_COLORS] || COLORS.gray[400];
@@ -322,6 +335,8 @@ function TaskCard({
   task: { id: string; title: string; notice?: { id?: string; noticeType?: string }; priority: string; isOverdue: boolean };
   onPress: () => void;
 }) {
+  const styles = useThemedStyles(createStyles);
+  const COLORS = useColors();
   return (
     <TouchableOpacity style={styles.taskCard} onPress={onPress}>
       <View style={[styles.taskPriority, { backgroundColor: RISK_COLORS[task.priority as keyof typeof RISK_COLORS] || COLORS.gray[400] }]} />
@@ -348,6 +363,7 @@ function QuickActionButton({
   icon: React.ReactNode;
   onPress: () => void;
 }) {
+  const styles = useThemedStyles(createStyles);
   return (
     <TouchableOpacity style={styles.quickActionButton} onPress={onPress}>
       {icon}
@@ -366,6 +382,8 @@ function UsageItem({
   used: number;
   limit: number;
 }) {
+  const styles = useThemedStyles(createStyles);
+  const COLORS = useColors();
   // Consider unlimited if limit is 0 or very high (>= 10000)
   const isUnlimited = limit === 0 || limit >= 10000;
   const percentage = isUnlimited ? 0 : Math.min((used / limit) * 100, 100);
@@ -399,7 +417,8 @@ function UsageItem({
   );
 }
 
-const styles = StyleSheet.create({
+const createStyles = (COLORS: Palette) =>
+  StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: COLORS.gray[50],

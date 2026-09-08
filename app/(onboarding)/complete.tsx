@@ -15,9 +15,15 @@ import { useRouter } from 'expo-router';
 import { CheckCircle, Rocket, ArrowRight } from 'lucide-react-native';
 import { useAuthStore } from '../../src/stores';
 import { Button } from '../../src/components';
-import { COLORS, SPACING, FONT_SIZES } from '../../src/utils/constants';
+import { SPACING, FONT_SIZES } from '../../src/utils/constants';
+import { useColors, useThemedStyles } from '../../src/theme/useTheme';
+import type { Palette } from '../../src/theme/palettes';
+import { useTranslation } from '../../src/hooks';
 
 export default function CompleteScreen() {
+  const { t } = useTranslation();
+  const styles = useThemedStyles(createStyles);
+  const COLORS = useColors();
   const router = useRouter();
   const { user } = useAuthStore();
 
@@ -63,7 +69,7 @@ export default function CompleteScreen() {
 
         {/* Content */}
         <Animated.View style={[styles.textContainer, { opacity: fadeAnim }]}>
-          <Text style={styles.title}>You're all set!</Text>
+          <Text style={styles.title}>{t('onboarding.youReAllSet')}</Text>
           <Text style={styles.subtitle}>
             {user?.organization?.name
               ? `${user.organization.name} has been created successfully.`
@@ -72,19 +78,19 @@ export default function CompleteScreen() {
 
           {/* Next Steps */}
           <View style={styles.nextStepsContainer}>
-            <Text style={styles.nextStepsTitle}>What's next?</Text>
+            <Text style={styles.nextStepsTitle}>{t('onboarding.whatSNext')}</Text>
             <View style={styles.stepsList}>
               <StepItem
                 number={1}
-                text="Upload your first GST notice"
+                text={t('onboarding.uploadYourFirstGstNotice')}
               />
               <StepItem
                 number={2}
-                text="Our AI will analyze it automatically"
+                text={t('onboarding.ourAiWillAnalyzeItAutomatically')}
               />
               <StepItem
                 number={3}
-                text="Track deadlines and manage responses"
+                text={t('onboarding.trackDeadlinesAndManageResponses')}
               />
             </View>
           </View>
@@ -102,7 +108,7 @@ export default function CompleteScreen() {
       {/* Bottom CTA */}
       <Animated.View style={[styles.bottomContainer, { opacity: fadeAnim }]}>
         <Button
-          title="Start Using App"
+          title={t('onboarding.startUsingApp')}
           onPress={handleContinue}
           variant="primary"
           fullWidth
@@ -114,6 +120,7 @@ export default function CompleteScreen() {
 }
 
 function StepItem({ number, text }: { number: number; text: string }) {
+  const styles = useThemedStyles(createStyles);
   return (
     <View style={styles.stepItem}>
       <View style={styles.stepNumber}>
@@ -124,7 +131,8 @@ function StepItem({ number, text }: { number: number; text: string }) {
   );
 }
 
-const styles = StyleSheet.create({
+const createStyles = (COLORS: Palette) =>
+  StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: COLORS.white,

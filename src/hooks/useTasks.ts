@@ -170,9 +170,24 @@ export function useUpdateTask() {
   const { queueAction } = useOfflineStore();
 
   return useMutation({
-    mutationFn: async ({ taskId, data }: { taskId: string; data: UpdateTaskDto }) => {
+    mutationFn: async ({
+      taskId,
+      data,
+      expectedUpdatedAt,
+    }: {
+      taskId: string;
+      data: UpdateTaskDto;
+      /** The task's `updatedAt` as the user saw it. */
+      expectedUpdatedAt?: string;
+    }) => {
       if (!isOnline) {
-        await queueAction('update_task', { taskId, data });
+        // Carry the baseline version into the queue. Without it the server
+        // cannot tell a queued edit from a current one, and a change made
+        // hours ago silently overwrites whatever happened since (TC-MOB-059).
+        await queueAction('update_task', {
+          taskId,
+          data: expectedUpdatedAt ? { ...data, expectedUpdatedAt } : data,
+        });
         throw new Error('Offline: Task will be updated when online');
       }
       return tasksApi.updateTask(taskId, data);

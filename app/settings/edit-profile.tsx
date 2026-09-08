@@ -17,11 +17,17 @@ import {
 import { Stack, useRouter } from 'expo-router';
 import { User, Phone, Camera, X } from 'lucide-react-native';
 import { useAuthStore, useUIStore } from '../../src/stores';
-import { authApi } from '../../src/services/api';
+import { authApi, getApiErrorMessage } from '../../src/services/api';
 import { Button, Input, LoadingSpinner } from '../../src/components/common';
-import { COLORS, SPACING, FONT_SIZES, BORDER_RADIUS } from '../../src/utils/constants';
+import { SPACING, FONT_SIZES, BORDER_RADIUS } from '../../src/utils/constants';
+import { useColors, useThemedStyles } from '../../src/theme/useTheme';
+import type { Palette } from '../../src/theme/palettes';
+import { useTranslation } from '../../src/hooks';
 
 export default function EditProfileScreen() {
+  const { t } = useTranslation();
+  const styles = useThemedStyles(createStyles);
+  const COLORS = useColors();
   const router = useRouter();
   const { user, refreshProfile } = useAuthStore();
   const { showToast } = useUIStore();
@@ -68,9 +74,12 @@ export default function EditProfileScreen() {
       await refreshProfile();
       showToast('success', 'Profile updated successfully');
       router.back();
-    } catch (error: any) {
-      const message = error.response?.data?.message || 'Failed to update profile';
-      Alert.alert('Error', message);
+    } catch (error) {
+      // Read the standard error envelope the rest of the app uses. The old
+      // hand-rolled lookup missed it, so a real reason from the server — an
+      // invalid number, a duplicate, a missing route — all read as the same
+      // "Failed to update profile" (TC-MOB-063).
+      Alert.alert('Could not save profile', getApiErrorMessage(error));
     } finally {
       setIsLoading(false);
     }
@@ -86,7 +95,7 @@ export default function EditProfileScreen() {
           headerRight: () =>
             hasChanges ? (
               <TouchableOpacity onPress={handleSave} disabled={isLoading}>
-                <Text style={styles.saveButton}>Save</Text>
+                <Text style={styles.saveButton}>{t('settings.save')}</Text>
               </TouchableOpacity>
             ) : null,
         }}
@@ -110,24 +119,24 @@ export default function EditProfileScreen() {
             </View>
             <TouchableOpacity
               style={styles.changePhotoButton}
-              onPress={() => Alert.alert('Coming Soon', 'Profile photo upload will be available soon.')}
+              onPress={() => Alert.alert(t('settings.comingSoon'), t('settings.profilePhotoUploadWillBeAvailableSoon'))}
             >
               <Camera size={16} color={COLORS.primary} />
-              <Text style={styles.changePhotoText}>Change Photo</Text>
+              <Text style={styles.changePhotoText}>{t('settings.changePhoto')}</Text>
             </TouchableOpacity>
           </View>
 
           {/* Form */}
           <View style={styles.form}>
             <View style={styles.inputGroup}>
-              <Text style={styles.label}>Full Name</Text>
+              <Text style={styles.label}>{t('settings.fullName')}</Text>
               <Input
                 value={name}
                 onChangeText={(text) => {
                   setName(text);
                   if (errors.name) setErrors((prev) => ({ ...prev, name: undefined }));
                 }}
-                placeholder="Enter your full name"
+                placeholder={t('settings.enterYourFullName')}
                 error={errors.name}
                 autoCapitalize="words"
                 leftIcon={<User size={20} color={COLORS.gray[400]} />}
@@ -135,14 +144,14 @@ export default function EditProfileScreen() {
             </View>
 
             <View style={styles.inputGroup}>
-              <Text style={styles.label}>Mobile Number</Text>
+              <Text style={styles.label}>{t('settings.mobileNumber')}</Text>
               <Input
                 value={mobile}
                 onChangeText={(text) => {
                   setMobile(text.replace(/\D/g, '').slice(0, 10));
                   if (errors.mobile) setErrors((prev) => ({ ...prev, mobile: undefined }));
                 }}
-                placeholder="Enter 10-digit mobile number"
+                placeholder={t('settings.enter10DigitMobileNumber')}
                 error={errors.mobile}
                 keyboardType="phone-pad"
                 maxLength={10}
@@ -151,22 +160,22 @@ export default function EditProfileScreen() {
             </View>
 
             <View style={styles.inputGroup}>
-              <Text style={styles.label}>Email</Text>
+              <Text style={styles.label}>{t('settings.email')}</Text>
               <View style={styles.readOnlyField}>
                 <Text style={styles.readOnlyText}>{user?.email}</Text>
-                <Text style={styles.readOnlyHint}>Email cannot be changed</Text>
+                <Text style={styles.readOnlyHint}>{t('settings.emailCannotBeChanged')}</Text>
               </View>
             </View>
           </View>
 
           {/* Security Section */}
           <View style={styles.securitySection}>
-            <Text style={styles.sectionTitle}>Security</Text>
+            <Text style={styles.sectionTitle}>{t('settings.security')}</Text>
             <TouchableOpacity
               style={styles.securityItem}
               onPress={() => router.push('/settings/change-password')}
             >
-              <Text style={styles.securityItemText}>Change Password</Text>
+              <Text style={styles.securityItemText}>{t('settings.changePassword')}</Text>
               <Text style={styles.securityItemChevron}>›</Text>
             </TouchableOpacity>
           </View>
@@ -187,7 +196,8 @@ export default function EditProfileScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+const createStyles = (COLORS: Palette) =>
+  StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: COLORS.gray[50],

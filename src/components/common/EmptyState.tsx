@@ -5,7 +5,9 @@
 import React from 'react';
 import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
 import { FileX, Search, AlertCircle, CheckSquare } from 'lucide-react-native';
-import { COLORS, SPACING, FONT_SIZES, BORDER_RADIUS } from '../../utils/constants';
+import { SPACING, FONT_SIZES, BORDER_RADIUS } from '../../utils/constants';
+import { useColors, useThemedStyles } from '../../theme/useTheme';
+import type { Palette } from '../../theme/palettes';
 
 interface EmptyStateProps {
   type?: 'notices' | 'tasks' | 'search' | 'error' | 'custom';
@@ -52,6 +54,8 @@ export function EmptyState({
   actionLabel,
   onAction,
 }: EmptyStateProps) {
+  const styles = useThemedStyles(createStyles);
+  const COLORS = useColors();
   const content = defaultContent[type];
   const IconComponent = content.icon;
 
@@ -71,7 +75,8 @@ export function EmptyState({
   );
 }
 
-const styles = StyleSheet.create({
+const createStyles = (COLORS: Palette) =>
+  StyleSheet.create({
   container: {
     flex: 1,
     justifyContent: 'center',

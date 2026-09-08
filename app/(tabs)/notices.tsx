@@ -14,26 +14,39 @@ import {
   RefreshControl,
 } from 'react-native';
 import { useRouter, useLocalSearchParams } from 'expo-router';
-import { Search, Filter, FileText, Clock, AlertCircle, ChevronDown, Zap, Upload, Edit3 } from 'lucide-react-native';
-import { useNoticesInfinite } from '../../src/hooks/useNotices';
-import { LoadingSpinner, EmptyState } from '../../src/components/common';
+import { Search, Filter, FileText, Clock, AlertCircle, ChevronDown, Zap, Upload, Edit3, X } from 'lucide-react-native';
+import { useNoticesInfinite, useCacheAge } from '../../src/hooks/useNotices';
+import { getCachedNoticesAge } from '../../src/services/storage/cache';
+import { useUIStore } from '../../src/stores';
+import { LoadingSpinner, EmptyState, OfflineContentBadge } from '../../src/components/common';
 import { NoticeDto, NoticeStatus, NoticePriority, NoticeSource } from '../../src/types';
-import { COLORS, SPACING, FONT_SIZES, BORDER_RADIUS, RISK_COLORS, STATUS_COLORS } from '../../src/utils/constants';
+import { SPACING, FONT_SIZES, BORDER_RADIUS, RISK_COLORS, STATUS_COLORS } from '../../src/utils/constants';
+import { useColors, useThemedStyles } from '../../src/theme/useTheme';
+import type { Palette } from '../../src/theme/palettes';
+import { useTranslation } from '../../src/hooks';
 
-const STATUS_OPTIONS: { label: string; value: NoticeStatus | 'all' }[] = [
-  { label: 'All', value: 'all' },
-  { label: 'Processing', value: 'processing' },
-  { label: 'Analyzed', value: 'analyzed' },
-  { label: 'In Progress', value: 'in_progress' },
-  { label: 'Responded', value: 'responded' },
-  { label: 'Closed', value: 'closed' },
+/** Built per render so the labels follow the active language. */
+const statusOptions = (
+  t: (key: string) => string
+): { label: string; value: NoticeStatus | 'all' }[] => [
+  { label: t('notices.all'), value: 'all' },
+  { label: t('notices.processing'), value: 'processing' },
+  { label: t('notices.analyzed'), value: 'analyzed' },
+  { label: t('notices.inProgress'), value: 'in_progress' },
+  { label: t('notices.responded'), value: 'responded' },
+  { label: t('notices.closed'), value: 'closed' },
 ];
 
 export default function NoticesScreen() {
+  const { t } = useTranslation();
+  const styles = useThemedStyles(createStyles);
+  const COLORS = useColors();
   const router = useRouter();
   const params = useLocalSearchParams<{ filter?: string; status?: string }>();
 
   const [search, setSearch] = useState('');
+  const isOnline = useUIStore((state) => state.isOnline);
+  const cachedAt = useCacheAge(getCachedNoticesAge);
   const [debouncedSearch, setDebouncedSearch] = useState('');
   const [selectedStatus, setSelectedStatus] = useState<NoticeStatus | 'all'>(
     (params.status as NoticeStatus) || 'all'
@@ -111,17 +124,32 @@ export default function NoticesScreen() {
 
   const renderHeader = () => (
     <View style={styles.header}>
+      {/* Offline, say that this list is a saved copy and how old it is. */}
+      <OfflineContentBadge cachedAt={cachedAt} visible={!isOnline} />
+
       {/* Search Bar */}
       <View style={styles.searchContainer}>
         <Search size={20} color={COLORS.gray[400]} />
         <TextInput
           style={styles.searchInput}
-          placeholder="Search notices..."
+          placeholder={t('notices.searchPlaceholder')}
           placeholderTextColor={COLORS.gray[400]}
           value={search}
           onChangeText={setSearch}
           returnKeyType="search"
         />
+        {search.length > 0 && (
+          // Clearing a 15-character GSTIN by backspace is 15 taps; this is one.
+          <TouchableOpacity
+            style={styles.clearButton}
+            onPress={() => setSearch('')}
+            accessibilityRole="button"
+            accessibilityLabel="Clear search"
+            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+          >
+            <X size={16} color={COLORS.gray[500]} />
+          </TouchableOpacity>
+        )}
         <TouchableOpacity
           style={styles.filterButton}
           onPress={() => setShowFilters(!showFilters)}
@@ -133,9 +161,9 @@ export default function NoticesScreen() {
       {/* Filter Pills */}
       {showFilters && (
         <View style={styles.filterContainer}>
-          <Text style={styles.filterLabel}>Status:</Text>
+          <Text style={styles.filterLabel}>{t('notices.statusLabel')}</Text>
           <View style={styles.filterPills}>
-            {STATUS_OPTIONS.map((option) => (
+            {statusOptions(t).map((option) => (
               <TouchableOpacity
                 key={option.value}
                 style={[
@@ -177,7 +205,7 @@ export default function NoticesScreen() {
   };
 
   if (isLoading) {
-    return <LoadingSpinner fullScreen message="Loading notices..." />;
+    return <LoadingSpinner fullScreen message={t('notices.loadingNotices')} />;
   }
 
   return (
@@ -219,6 +247,9 @@ function NoticeCard({
   notice: NoticeDto;
   onPress: () => void;
 }) {
+  const { t } = useTranslation();
+  const styles = useThemedStyles(createStyles);
+  const COLORS = useColors();
   const getStatusColor = (status: NoticeStatus) => {
     return STATUS_COLORS[status] || COLORS.gray[500];
   };
@@ -239,11 +270,11 @@ function NoticeCard({
   const getSourceConfig = (source?: NoticeSource) => {
     switch (source) {
       case 'gstn_portal':
-        return { icon: Zap, color: COLORS.success, label: 'Portal' };
+        return { icon: Zap, color: COLORS.success, label: t('notices.sourcePortal') };
       case 'manual':
-        return { icon: Edit3, color: COLORS.gray[500], label: 'Manual' };
+        return { icon: Edit3, color: COLORS.gray[500], label: t('notices.sourceManual') };
       default:
-        return { icon: Upload, color: COLORS.info, label: 'Upload' };
+        return { icon: Upload, color: COLORS.info, label: t('notices.sourceUpload') };
     }
   };
 
@@ -305,14 +336,15 @@ function NoticeCard({
       {notice.daysRemaining !== undefined && notice.daysRemaining < 0 && (
         <View style={styles.overdueWarning}>
           <AlertCircle size={14} color={COLORS.error} />
-          <Text style={styles.overdueText}>Immediate attention required</Text>
+          <Text style={styles.overdueText}>{t('notices.immediateAttention')}</Text>
         </View>
       )}
     </TouchableOpacity>
   );
 }
 
-const styles = StyleSheet.create({
+const createStyles = (COLORS: Palette) =>
+  StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: COLORS.gray[50],
@@ -331,6 +363,15 @@ const styles = StyleSheet.create({
     paddingHorizontal: SPACING.md,
     borderRadius: BORDER_RADIUS.lg,
     height: 48,
+  },
+  clearButton: {
+    width: 22,
+    height: 22,
+    borderRadius: 11,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: COLORS.gray[200],
+    marginRight: SPACING.xs,
   },
   searchInput: {
     flex: 1,

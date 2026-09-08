@@ -17,11 +17,17 @@ import { useRouter, useLocalSearchParams } from 'expo-router';
 import { KeyRound, CheckCircle, AlertCircle } from 'lucide-react-native';
 import { authApi } from '../../src/services/api';
 import { Button, PasswordInput, LoadingSpinner } from '../../src/components/common';
-import { COLORS, SPACING, FONT_SIZES, BORDER_RADIUS } from '../../src/utils/constants';
+import { SPACING, FONT_SIZES, BORDER_RADIUS } from '../../src/utils/constants';
+import { useColors, useThemedStyles } from '../../src/theme/useTheme';
+import type { Palette } from '../../src/theme/palettes';
+import { useTranslation } from '../../src/hooks';
 
 type ScreenState = 'form' | 'success' | 'error' | 'expired';
 
 export default function ResetPasswordScreen() {
+  const { t } = useTranslation();
+  const styles = useThemedStyles(createStyles);
+  const COLORS = useColors();
   const router = useRouter();
   const params = useLocalSearchParams<{ token?: string }>();
   const token = params.token;
@@ -111,19 +117,19 @@ export default function ResetPasswordScreen() {
           <View style={[styles.iconContainer, styles.errorIcon]}>
             <AlertCircle size={48} color={COLORS.error} />
           </View>
-          <Text style={styles.title}>Invalid Reset Link</Text>
+          <Text style={styles.title}>{t('auth.invalidResetLink')}</Text>
           <Text style={styles.subtitle}>
             This password reset link is invalid or malformed. Please request a new one.
           </Text>
           <Button
-            title="Request New Link"
+            title={t('auth.requestNewLink')}
             onPress={handleRequestNewLink}
             variant="primary"
             fullWidth
             style={styles.actionButton}
           />
           <Button
-            title="Back to Login"
+            title={t('auth.backToLogin')}
             onPress={handleGoToLogin}
             variant="outline"
             fullWidth
@@ -141,19 +147,19 @@ export default function ResetPasswordScreen() {
           <View style={[styles.iconContainer, styles.warningIcon]}>
             <AlertCircle size={48} color={COLORS.warning} />
           </View>
-          <Text style={styles.title}>Link Expired</Text>
+          <Text style={styles.title}>{t('auth.linkExpired')}</Text>
           <Text style={styles.subtitle}>
             This password reset link has expired. Please request a new one.
           </Text>
           <Button
-            title="Request New Link"
+            title={t('auth.requestNewLink')}
             onPress={handleRequestNewLink}
             variant="primary"
             fullWidth
             style={styles.actionButton}
           />
           <Button
-            title="Back to Login"
+            title={t('auth.backToLogin')}
             onPress={handleGoToLogin}
             variant="outline"
             fullWidth
@@ -171,12 +177,12 @@ export default function ResetPasswordScreen() {
           <View style={[styles.iconContainer, styles.successIcon]}>
             <CheckCircle size={48} color={COLORS.success} />
           </View>
-          <Text style={styles.title}>Password Reset!</Text>
+          <Text style={styles.title}>{t('auth.passwordReset')}</Text>
           <Text style={styles.subtitle}>
             Your password has been successfully reset. You can now log in with your new password.
           </Text>
           <Button
-            title="Go to Login"
+            title={t('auth.goToLogin')}
             onPress={handleGoToLogin}
             variant="primary"
             fullWidth
@@ -204,7 +210,7 @@ export default function ResetPasswordScreen() {
           <View style={styles.iconContainer}>
             <KeyRound size={32} color={COLORS.primary} />
           </View>
-          <Text style={styles.title}>Create New Password</Text>
+          <Text style={styles.title}>{t('auth.createNewPassword')}</Text>
           <Text style={styles.subtitle}>
             Enter a strong password for your account
           </Text>
@@ -213,7 +219,7 @@ export default function ResetPasswordScreen() {
         {/* Form */}
         <View style={styles.form}>
           <PasswordInput
-            label="New Password"
+            label={t('auth.newPassword')}
             value={newPassword}
             onChangeText={(text) => {
               setNewPassword(text);
@@ -221,14 +227,14 @@ export default function ResetPasswordScreen() {
                 setErrors((prev) => ({ ...prev, newPassword: undefined }));
               }
             }}
-            placeholder="Enter your new password"
+            placeholder={t('auth.enterYourNewPassword')}
             error={errors.newPassword}
           />
 
           {/* Password Requirements */}
           {newPassword.length > 0 && (
             <View style={styles.requirements}>
-              <Text style={styles.requirementsTitle}>Password Requirements</Text>
+              <Text style={styles.requirementsTitle}>{t('auth.passwordRequirements')}</Text>
               {passwordRequirements.map((req, index) => (
                 <View key={index} style={styles.requirementRow}>
                   <CheckCircle
@@ -249,7 +255,7 @@ export default function ResetPasswordScreen() {
           )}
 
           <PasswordInput
-            label="Confirm Password"
+            label={t('auth.confirmPassword')}
             value={confirmPassword}
             onChangeText={(text) => {
               setConfirmPassword(text);
@@ -257,7 +263,7 @@ export default function ResetPasswordScreen() {
                 setErrors((prev) => ({ ...prev, confirmPassword: undefined }));
               }
             }}
-            placeholder="Confirm your new password"
+            placeholder={t('auth.confirmYourNewPassword')}
             error={errors.confirmPassword}
           />
 
@@ -271,7 +277,7 @@ export default function ResetPasswordScreen() {
           />
 
           <Button
-            title="Back to Login"
+            title={t('auth.backToLogin')}
             onPress={handleGoToLogin}
             variant="ghost"
             fullWidth
@@ -282,7 +288,8 @@ export default function ResetPasswordScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+const createStyles = (COLORS: Palette) =>
+  StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: COLORS.white,

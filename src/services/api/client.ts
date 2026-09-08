@@ -135,8 +135,32 @@ export function isApiError(error: unknown): error is AxiosError<ApiErrorResponse
   return axios.isAxiosError(error);
 }
 
+/** Shown whenever the request never reached the server. */
+export const NO_INTERNET_MESSAGE = 'No internet connection';
+/** Shown when the connection exists but the server did not answer in time. */
+export const TIMEOUT_MESSAGE = 'Request timed out. Please check your connection and try again.';
+
+/**
+ * True when the request never reached the server — airplane mode, no signal,
+ * DNS failure or a timeout. Callers use this to offer a retry instead of
+ * treating the attempt as rejected by the backend.
+ */
+export function isNetworkError(error: unknown): boolean {
+  return isApiError(error) && !error.response;
+}
+
+function isTimeoutError(error: AxiosError): boolean {
+  return error.code === 'ECONNABORTED' || error.code === 'ETIMEDOUT';
+}
+
 export function getApiErrorMessage(error: unknown): string {
   if (isApiError(error)) {
+    // No response at all: the request never left the device or never arrived.
+    // Without this branch, users saw axios' raw "Network Error" string.
+    if (!error.response) {
+      return isTimeoutError(error) ? TIMEOUT_MESSAGE : NO_INTERNET_MESSAGE;
+    }
+
     const data = error.response?.data as
       | (ApiErrorResponse & {
           // ASP.NET ValidationProblemDetails shape for 400 validation errors

@@ -30,6 +30,9 @@ export const STORAGE_KEYS = {
   BIOMETRIC_ENABLED: "biometric_enabled",
   DARK_MODE_ENABLED: "dark_mode_enabled",
   CACHED_NOTICES: "cached_notices",
+  // Per-notice detail, suffixed with the notice id. The list cache holds only
+  // summary rows, which the detail screen cannot render (TC-MOB-056).
+  CACHED_NOTICE_DETAIL_PREFIX: "cached_notice_detail:",
   CACHED_TASKS: "cached_tasks",
   CACHED_PLANS: "cached_plans",
   CACHED_SUBSCRIPTION: "cached_subscription",
@@ -170,4 +173,10 @@ export const NOTIFICATION_CHANNELS = {
   DEADLINE_REGULAR: "deadline_regular",
   TASKS: "tasks",
   COLLABORATION: "collaboration",
+  // The API's GetAndroidChannelId falls back to "default" for every medium and
+  // low priority type outside the Task/Collaboration categories — notice
+  // assignments, 7-day deadlines, GST sync, billing. Without a channel of this
+  // name the OS drops them into an auto-created "Miscellaneous" channel with
+  // the wrong importance and no user-visible settings (TC-MOB-049).
+  DEFAULT: "default",
 } as const;

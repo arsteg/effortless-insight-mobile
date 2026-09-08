@@ -13,11 +13,17 @@ import { useRouter, useLocalSearchParams } from 'expo-router';
 import { CheckCircle, AlertCircle, Mail } from 'lucide-react-native';
 import { authApi } from '../../src/services/api';
 import { Button, LoadingSpinner } from '../../src/components/common';
-import { COLORS, SPACING, FONT_SIZES } from '../../src/utils/constants';
+import { SPACING, FONT_SIZES } from '../../src/utils/constants';
+import { useColors, useThemedStyles } from '../../src/theme/useTheme';
+import type { Palette } from '../../src/theme/palettes';
+import { useTranslation } from '../../src/hooks';
 
 type ScreenState = 'loading' | 'success' | 'error' | 'expired';
 
 export default function VerifyEmailScreen() {
+  const { t } = useTranslation();
+  const styles = useThemedStyles(createStyles);
+  const COLORS = useColors();
   const router = useRouter();
   const params = useLocalSearchParams<{ token?: string }>();
   const token = params.token;
@@ -75,7 +81,7 @@ export default function VerifyEmailScreen() {
     return (
       <View style={styles.container}>
         <View style={styles.centerContent}>
-          <LoadingSpinner message="Verifying your email..." />
+          <LoadingSpinner message={t('auth.verifyingYourEmail')} />
         </View>
       </View>
     );
@@ -89,12 +95,12 @@ export default function VerifyEmailScreen() {
           <View style={[styles.iconContainer, styles.successIcon]}>
             <CheckCircle size={48} color={COLORS.success} />
           </View>
-          <Text style={styles.title}>Email Verified!</Text>
+          <Text style={styles.title}>{t('auth.emailVerified')}</Text>
           <Text style={styles.subtitle}>
             Your email has been successfully verified. You can now access all features of your account.
           </Text>
           <Button
-            title="Continue to Login"
+            title={t('auth.continueToLogin')}
             onPress={handleGoToLogin}
             variant="primary"
             fullWidth
@@ -113,19 +119,19 @@ export default function VerifyEmailScreen() {
           <View style={[styles.iconContainer, styles.warningIcon]}>
             <Mail size={48} color={COLORS.warning} />
           </View>
-          <Text style={styles.title}>Link Expired</Text>
+          <Text style={styles.title}>{t('auth.linkExpired')}</Text>
           <Text style={styles.subtitle}>
             This verification link has expired. Please request a new verification email.
           </Text>
           <Button
-            title="Resend Verification Email"
+            title={t('auth.resendVerificationEmail')}
             onPress={handleResendVerification}
             variant="primary"
             fullWidth
             style={styles.actionButton}
           />
           <Button
-            title="Back to Login"
+            title={t('auth.backToLogin')}
             onPress={handleGoToLogin}
             variant="outline"
             fullWidth
@@ -142,19 +148,19 @@ export default function VerifyEmailScreen() {
         <View style={[styles.iconContainer, styles.errorIcon]}>
           <AlertCircle size={48} color={COLORS.error} />
         </View>
-        <Text style={styles.title}>Verification Failed</Text>
+        <Text style={styles.title}>{t('auth.verificationFailed')}</Text>
         <Text style={styles.subtitle}>
           {errorMessage || 'We could not verify your email. Please try again or request a new verification link.'}
         </Text>
         <Button
-          title="Resend Verification Email"
+          title={t('auth.resendVerificationEmail')}
           onPress={handleResendVerification}
           variant="primary"
           fullWidth
           style={styles.actionButton}
         />
         <Button
-          title="Back to Login"
+          title={t('auth.backToLogin')}
           onPress={handleGoToLogin}
           variant="outline"
           fullWidth
@@ -164,7 +170,8 @@ export default function VerifyEmailScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+const createStyles = (COLORS: Palette) =>
+  StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: COLORS.white,

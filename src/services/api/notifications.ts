@@ -16,6 +16,15 @@ import {
   NotificationActionResult,
 } from '../../types/notification';
 import { ApiResponse } from '../../types';
+import {
+  preferencesFromWire,
+  updateToWire,
+  type WireNotificationPreferences,
+} from '../../utils/notificationPreferences';
+import {
+  getLocalInAppPreference,
+  setLocalInAppPreference,
+} from '../inAppNotificationPreference';
 
 export const notificationsApi = {
   /**
@@ -95,19 +104,37 @@ export const notificationsApi = {
   },
 
   /**
-   * Get notification preferences
+   * Get notification preferences.
+   *
+   * The API returns each channel as an object (`{ enabled, address }`), not a
+   * boolean. Read raw and converted, or every switch renders ON — an object is
+   * truthy whatever `enabled` says.
    */
   getPreferences: async (): Promise<NotificationPreferencesDto> => {
-    const response = await apiClient.get<ApiResponse<NotificationPreferencesDto>>('/users/me/notification-preferences');
-    return response.data.data;
+    const response = await apiClient.get<ApiResponse<WireNotificationPreferences>>(
+      '/users/me/notification-preferences'
+    );
+    return preferencesFromWire(response.data.data, await getLocalInAppPreference());
   },
 
   /**
-   * Update notification preferences
+   * Update notification preferences.
+   *
+   * Converted to the API's shape on the way out. Sending flat booleans bound to
+   * null server-side, so the PUT returned 200 and changed nothing.
    */
   updatePreferences: async (request: UpdateNotificationPreferencesRequest): Promise<NotificationPreferencesDto> => {
-    const response = await apiClient.put<ApiResponse<NotificationPreferencesDto>>('/users/me/notification-preferences', request);
-    return response.data.data;
+    // No server field exists for the global in-app switch, so it is kept on the
+    // device rather than silently discarded.
+    if (typeof request.channels?.inApp === 'boolean') {
+      await setLocalInAppPreference(request.channels.inApp);
+    }
+
+    const response = await apiClient.put<ApiResponse<WireNotificationPreferences>>(
+      '/users/me/notification-preferences',
+      updateToWire(request)
+    );
+    return preferencesFromWire(response.data.data, await getLocalInAppPreference());
   },
 
   /**

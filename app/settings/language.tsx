@@ -9,7 +9,9 @@ import { Stack, useRouter } from 'expo-router';
 import { Check, Globe } from 'lucide-react-native';
 import { useTranslation } from '../../src/hooks';
 import { useUIStore } from '../../src/stores';
-import { COLORS, SPACING, FONT_SIZES, BORDER_RADIUS } from '../../src/utils/constants';
+import { SPACING, FONT_SIZES, BORDER_RADIUS } from '../../src/utils/constants';
+import { useColors, useThemedStyles } from '../../src/theme/useTheme';
+import type { Palette } from '../../src/theme/palettes';
 
 interface LanguageOption {
   code: 'en' | 'hi';
@@ -23,6 +25,8 @@ const LANGUAGES: LanguageOption[] = [
 ];
 
 export default function LanguageScreen() {
+  const styles = useThemedStyles(createStyles);
+  const COLORS = useColors();
   const router = useRouter();
   const { t, locale, setLocale } = useTranslation();
   const { showToast } = useUIStore();
@@ -99,7 +103,8 @@ export default function LanguageScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+const createStyles = (COLORS: Palette) =>
+  StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: COLORS.gray[50],

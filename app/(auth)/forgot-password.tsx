@@ -18,7 +18,10 @@ import { z } from 'zod';
 import { Mail, ArrowLeft } from 'lucide-react-native';
 import { authApi, getApiErrorMessage } from '../../src/services/api';
 import { Button, Input } from '../../src/components/common';
-import { COLORS, SPACING, FONT_SIZES, BORDER_RADIUS } from '../../src/utils/constants';
+import { SPACING, FONT_SIZES, BORDER_RADIUS } from '../../src/utils/constants';
+import { useColors, useThemedStyles } from '../../src/theme/useTheme';
+import type { Palette } from '../../src/theme/palettes';
+import { useTranslation } from '../../src/hooks';
 
 const forgotPasswordSchema = z.object({
   email: z.string().email('Please enter a valid email address'),
@@ -27,6 +30,9 @@ const forgotPasswordSchema = z.object({
 type ForgotPasswordFormData = z.infer<typeof forgotPasswordSchema>;
 
 export default function ForgotPasswordScreen() {
+  const { t } = useTranslation();
+  const styles = useThemedStyles(createStyles);
+  const COLORS = useColors();
   const router = useRouter();
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -66,20 +72,20 @@ export default function ForgotPasswordScreen() {
         <View style={styles.successIcon}>
           <Mail size={40} color={COLORS.white} />
         </View>
-        <Text style={styles.successTitle}>Check Your Email</Text>
+        <Text style={styles.successTitle}>{t('auth.checkYourEmail')}</Text>
         <Text style={styles.successMessage}>
           We've sent a password reset link to{' '}
           <Text style={styles.emailHighlight}>{email}</Text>. Please check your inbox and follow
           the instructions to reset your password.
         </Text>
         <Button
-          title="Back to Login"
+          title={t('auth.backToLogin')}
           onPress={() => router.replace('/(auth)/login')}
           fullWidth
           size="lg"
         />
         <TouchableOpacity style={styles.resendLink} onPress={handleSubmit(onSubmit)}>
-          <Text style={styles.resendText}>Didn't receive the email? Resend</Text>
+          <Text style={styles.resendText}>{t('auth.didnTReceiveTheEmailResend')}</Text>
         </TouchableOpacity>
       </View>
     );
@@ -88,7 +94,7 @@ export default function ForgotPasswordScreen() {
   return (
     <KeyboardAvoidingView
       style={styles.container}
-      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+      behavior={Platform.OS === 'ios' ? 'padding' : undefined}
     >
       <View style={styles.content}>
         {/* Back Button */}
@@ -98,7 +104,7 @@ export default function ForgotPasswordScreen() {
 
         {/* Header */}
         <View style={styles.header}>
-          <Text style={styles.title}>Forgot Password?</Text>
+          <Text style={styles.title}>{t('auth.forgotPassword')}</Text>
           <Text style={styles.subtitle}>
             No worries! Enter your email address and we'll send you a link to reset your password.
           </Text>
@@ -118,8 +124,8 @@ export default function ForgotPasswordScreen() {
             name="email"
             render={({ field: { onChange, onBlur, value } }) => (
               <Input
-                label="Email"
-                placeholder="Enter your email"
+                label={t('auth.email')}
+                placeholder={t('auth.enterYourEmail')}
                 keyboardType="email-address"
                 autoCapitalize="none"
                 autoCorrect={false}
@@ -133,7 +139,7 @@ export default function ForgotPasswordScreen() {
           />
 
           <Button
-            title="Send Reset Link"
+            title={t('auth.sendResetLink')}
             onPress={handleSubmit(onSubmit)}
             loading={isLoading}
             fullWidth
@@ -143,9 +149,9 @@ export default function ForgotPasswordScreen() {
 
         {/* Login Link */}
         <View style={styles.loginContainer}>
-          <Text style={styles.loginText}>Remember your password? </Text>
+          <Text style={styles.loginText}>{t('auth.rememberYourPassword')} </Text>
           <TouchableOpacity onPress={() => router.push('/(auth)/login')}>
-            <Text style={styles.loginLink}>Sign In</Text>
+            <Text style={styles.loginLink}>{t('auth.signIn')}</Text>
           </TouchableOpacity>
         </View>
       </View>
@@ -153,7 +159,8 @@ export default function ForgotPasswordScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+const createStyles = (COLORS: Palette) =>
+  StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: COLORS.white,

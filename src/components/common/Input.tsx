@@ -13,7 +13,9 @@ import {
   ViewStyle,
 } from 'react-native';
 import { Eye, EyeOff } from 'lucide-react-native';
-import { COLORS, SPACING, FONT_SIZES, BORDER_RADIUS } from '../../utils/constants';
+import { SPACING, FONT_SIZES, BORDER_RADIUS } from '../../utils/constants';
+import { useColors, useThemedStyles } from '../../theme/useTheme';
+import type { Palette } from '../../theme/palettes';
 
 interface InputProps extends TextInputProps {
   label?: string;
@@ -38,6 +40,8 @@ export const Input = forwardRef<TextInput, InputProps>(
     },
     ref
   ) => {
+    const styles = useThemedStyles(createStyles);
+    const COLORS = useColors();
     const [isPasswordVisible, setIsPasswordVisible] = useState(false);
     const isPassword = secureTextEntry !== undefined;
 
@@ -87,7 +91,8 @@ export const Input = forwardRef<TextInput, InputProps>(
 
 Input.displayName = 'Input';
 
-const styles = StyleSheet.create({
+const createStyles = (COLORS: Palette) =>
+  StyleSheet.create({
   container: {
     marginBottom: SPACING.md,
   },

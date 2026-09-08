@@ -11,7 +11,9 @@ import {
   ViewStyle,
   TextStyle,
 } from 'react-native';
-import { COLORS, SPACING, FONT_SIZES, BORDER_RADIUS } from '../../utils/constants';
+import { SPACING, FONT_SIZES, BORDER_RADIUS } from '../../utils/constants';
+import { useColors, useThemedStyles } from '../../theme/useTheme';
+import type { Palette } from '../../theme/palettes';
 
 interface ButtonProps {
   title: string;
@@ -40,6 +42,8 @@ export function Button({
   style,
   textStyle,
 }: ButtonProps) {
+  const styles = useThemedStyles(createStyles);
+  const COLORS = useColors();
   const buttonStyles = [
     styles.base,
     styles[variant],
@@ -78,7 +82,8 @@ export function Button({
   );
 }
 
-const styles = StyleSheet.create({
+const createStyles = (COLORS: Palette) =>
+  StyleSheet.create({
   base: {
     flexDirection: 'row',
     alignItems: 'center',

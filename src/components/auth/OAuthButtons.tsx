@@ -16,9 +16,10 @@ import * as Linking from 'expo-linking';
 import { Svg, Path } from 'react-native-svg';
 
 import { authApi } from '../../services/api';
-import { setTokens } from '../../services/storage/secure';
-import { OAuthProviderInfo } from '../../types';
-import { COLORS, SPACING, FONT_SIZES, BORDER_RADIUS } from '../../utils/constants';
+import { OAuthProviderInfo, UserDto } from '../../types';
+import { SPACING, FONT_SIZES, BORDER_RADIUS } from '../../utils/constants';
+import { useColors, useThemedStyles } from '../../theme/useTheme';
+import type { Palette } from '../../theme/palettes';
 
 // Ensure WebBrowser sessions are dismissed properly
 WebBrowser.maybeCompleteAuthSession();
@@ -65,24 +66,31 @@ const providerIcons: Record<string, React.FC<{ size?: number }>> = {
 };
 
 interface OAuthButtonsProps {
+  /** Kept for call sites; both modes use the same neutral button label. */
   mode?: 'login' | 'register';
   disabled?: boolean;
   onSuccess: (response: {
     accessToken: string;
     refreshToken: string;
-    user: any;
+    /** Only the code-exchange path returns a user; the token path leaves it
+     *  undefined and the store fetches the profile itself. */
+    user?: UserDto;
     requires2fa?: boolean;
     partialToken?: string;
   }) => void;
   onError: (error: string) => void;
+  /** Called when the user backs out of the provider sheet. */
+  onCancel?: () => void;
 }
 
 export function OAuthButtons({
-  mode = 'login',
   disabled = false,
   onSuccess,
   onError,
+  onCancel,
 }: OAuthButtonsProps) {
+  const styles = useThemedStyles(createStyles);
+  const COLORS = useColors();
   const [providers, setProviders] = useState<OAuthProviderInfo[]>([]);
   const [loadingProvider, setLoadingProvider] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -138,17 +146,10 @@ export function OAuthButtons({
         const refreshToken = url.searchParams.get('refreshToken');
 
         if (accessToken && refreshToken) {
-          // Tokens received directly from web callback. They must be persisted
-          // BEFORE calling any authenticated endpoint — the request
-          // interceptor reads storage, so fetching the profile first would go
-          // out with a stale/absent token.
-          await setTokens(accessToken, refreshToken);
-          const profile = await authApi.getProfile();
-          onSuccess({
-            accessToken,
-            refreshToken,
-            user: profile,
-          });
+          // Tokens received directly from the web callback. Persisting them and
+          // fetching the profile is the store's job — doing it here bypassed
+          // `mapProfileToUser` and handed the app a mis-shaped user.
+          onSuccess({ accessToken, refreshToken });
         } else {
           // Fallback: received authorization code, exchange it for tokens
           const code = url.searchParams.get('code');
@@ -178,9 +179,12 @@ export function OAuthButtons({
             partialToken: callbackResponse.partialToken,
           });
         }
-      } else if (result.type === 'cancel') {
-        // User cancelled the OAuth flow
-        console.log('OAuth flow cancelled by user');
+      } else if (result.type === 'cancel' || result.type === 'dismiss') {
+        // The user backed out (tapped Cancel, or swiped the iOS sheet away).
+        // That is a choice, not an error, so it stays silent — but `dismiss`
+        // has to be handled explicitly or it falls through as an unexplained
+        // no-op. The `finally` below restores the button either way.
+        onCancel?.();
       }
     } catch (error) {
       console.error(`OAuth ${providerId} error:`, error);
@@ -199,7 +203,9 @@ export function OAuthButtons({
     return null;
   }
 
-  const actionText = mode === 'login' ? 'Sign in' : 'Sign up';
+  // Both modes land in the same provider flow, so the neutral verb is used —
+  // it also matches the "Or continue with" divider above the buttons.
+  const actionText = 'Continue';
 
   return (
     <View style={styles.container}>
@@ -243,7 +249,8 @@ export function OAuthButtons({
   );
 }
 
-const styles = StyleSheet.create({
+const createStyles = (COLORS: Palette) =>
+  StyleSheet.create({
   container: {
     width: '100%',
   },

@@ -45,8 +45,11 @@ export const noticesApi = {
     }
     if (params.search) queryParams.append('search', params.search);
     if (params.gstin) queryParams.append('gstin', params.gstin);
-    if (params.dueBefore) queryParams.append('dueBefore', params.dueBefore);
-    if (params.dueAfter) queryParams.append('dueAfter', params.dueAfter);
+    // The API binds `NoticeFilterDto`, whose fields are DeadlineFrom/DeadlineTo.
+    // These were sent as dueBefore/dueAfter, which the server silently ignored —
+    // the date filter never actually applied (found building the calendar).
+    if (params.dueAfter) queryParams.append('deadlineFrom', params.dueAfter);
+    if (params.dueBefore) queryParams.append('deadlineTo', params.dueBefore);
     if (params.sortBy) queryParams.append('sortBy', params.sortBy);
     if (params.sortOrder) queryParams.append('sortOrder', params.sortOrder);
 

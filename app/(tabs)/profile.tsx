@@ -25,6 +25,7 @@ import {
   Globe,
   HelpCircle,
   Info,
+  LifeBuoy,
   Trash2,
   ExternalLink,
   CreditCard,
@@ -281,6 +282,11 @@ export default function ProfileScreen() {
       <View style={styles.section}>
         <Text style={styles.sectionTitle}>Support</Text>
 
+        <SettingItem
+          icon={<LifeBuoy size={20} color={COLORS.gray[500]} />}
+          label="Support Tickets"
+          onPress={() => router.push('/support')}
+        />
         <SettingItem
           icon={<HelpCircle size={20} color={COLORS.gray[500]} />}
           label="Help Center"

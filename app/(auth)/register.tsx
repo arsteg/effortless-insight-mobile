@@ -360,9 +360,27 @@ export default function RegisterScreen() {
                 placeholder={t('auth.enterYourMobileNumber')}
                 keyboardType="phone-pad"
                 maxLength={10}
-                leftIcon={<Phone size={20} color={COLORS.gray[500]} />}
+                leftIcon={
+                  <View style={styles.mobilePrefix}>
+                    <Phone size={20} color={COLORS.gray[500]} />
+                    <Text style={styles.mobilePrefixText}>+91</Text>
+                  </View>
+                }
                 value={value}
-                onChangeText={onChange}
+                onChangeText={(text) => {
+                  // Keep only the 10-digit subscriber number. Strip non-digits
+                  // and a country-code prefix users often add (91 / 0) so
+                  // "+91 93113…" or "091…" normalise to the bare 10 digits the
+                  // backend expects (the +91 is shown, never typed).
+                  let digits = text.replace(/\D/g, '');
+                  if (digits.length > 10 && digits.startsWith('91')) {
+                    digits = digits.slice(2);
+                  }
+                  if (digits.length > 10 && digits.startsWith('0')) {
+                    digits = digits.slice(1);
+                  }
+                  onChange(digits.slice(0, 10));
+                }}
                 onBlur={onBlur}
                 error={errors.mobile?.message}
               />
@@ -559,6 +577,16 @@ const createStyles = (COLORS: Palette) =>
   },
   form: {
     flex: 1,
+  },
+  mobilePrefix: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: SPACING.xs,
+  },
+  mobilePrefixText: {
+    fontSize: FONT_SIZES.md,
+    color: COLORS.gray[700],
+    fontWeight: '500',
   },
   otpContainer: {
     marginBottom: SPACING.md,

@@ -67,6 +67,16 @@ import {
   UPLOAD_IMAGE_WIDTH,
 } from '../../src/utils/pdfGenerator';
 import {
+  nextLowLightState,
+  isDarkCapture,
+  LOW_LIGHT_KEY,
+  LOW_LIGHT_HINT_KEY,
+  DARK_CAPTURE_TITLE_KEY,
+  DARK_CAPTURE_BODY_KEY,
+} from '../../src/utils/lowLight';
+import { meanLumaFrom1x1Png } from '../../src/utils/imageBrightness';
+import { subscribeToLightLevel, supportsAmbientLight } from '../../src/services/lightSensor';
+import {
   isStorageLow,
   hasRoomForScan,
   estimatedScanBytes,
@@ -127,6 +137,13 @@ export default function UploadScreen() {
    * reading notices (TC-MOB-085).
    */
   const [isScreenFocused, setIsScreenFocused] = useState(true);
+  /**
+   * Whether the ambient light is too low to scan well (TC-MOB-026).
+   *
+   * Android only — iOS exposes no ambient-light sensor, so there this stays
+   * false and the post-capture brightness check carries the warning instead.
+   */
+  const [isLowLight, setIsLowLight] = useState(false);
   const [uploadError, setUploadError] = useState<string | null>(null);
   // Distinguishes "queued for later" from "uploaded" on the success screen.
   const [queuedOffline, setQueuedOffline] = useState(false);
@@ -193,6 +210,23 @@ export default function UploadScreen() {
 
   /** The camera is only worth holding open when it is actually being used. */
   const isCameraActive = isScreenFocused && scanState === 'camera';
+
+  /**
+   * Watch the ambient-light sensor while the viewfinder is up (TC-MOB-026).
+   *
+   * Scoped to `isCameraActive` for the same reason the camera itself is: a
+   * sensor left listening on a background tab is pure battery cost.
+   */
+  useEffect(() => {
+    if (!isCameraActive || !supportsAmbientLight) {
+      setIsLowLight(false);
+      return;
+    }
+    const unsubscribe = subscribeToLightLevel((lux) => {
+      setIsLowLight((showing) => nextLowLightState(lux, showing));
+    });
+    return unsubscribe;
+  }, [isCameraActive]);
 
   // Pulse animation for the frame guide, and only while the guide is on screen.
   useEffect(() => {
@@ -267,6 +301,32 @@ export default function UploadScreen() {
     }
   };
 
+  /**
+   * Warn when a capture came out too dark to read (TC-MOB-026).
+   *
+   * Resized to a single pixel first, so the resampler does the averaging and
+   * the decode stays trivial — see utils/imageBrightness. Runs after the page
+   * is already saved, so a slow measurement never delays the shutter, and a
+   * failure to measure says nothing rather than guessing.
+   */
+  const warnIfCaptureIsDark = async (uri: string) => {
+    try {
+      const tiny = await ImageManipulator.manipulateAsync(
+        uri,
+        [{ resize: { width: 1, height: 1 } }],
+        { format: ImageManipulator.SaveFormat.PNG, base64: true }
+      );
+      trackScratchFile(tiny.uri);
+      if (!tiny.base64) return;
+
+      if (isDarkCapture(meanLumaFrom1x1Png(tiny.base64))) {
+        Alert.alert(t(DARK_CAPTURE_TITLE_KEY), t(DARK_CAPTURE_BODY_KEY));
+      }
+    } catch {
+      // Unmeasurable brightness is not worth reporting to the user.
+    }
+  };
+
   const generatePageId = () => `page_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
 
   const createThumbnail = async (uri: string): Promise<string> => {
@@ -313,12 +373,14 @@ export default function UploadScreen() {
               prev.map((page) => (page.id === pageId ? { ...page, thumbnailUri } : page))
             );
           });
+          void warnIfCaptureIsDark(photo.uri);
           // Stay in camera mode for next page
         } else {
           setOriginalImage(photo.uri);
           setCapturedImage(photo.uri);
           setEnhanceMode('original');
           setScanState('preview');
+          void warnIfCaptureIsDark(photo.uri);
         }
       }
     } catch (error) {
@@ -1105,6 +1167,19 @@ export default function UploadScreen() {
             <View style={[styles.corner, styles.cornerBR]} />
           </Animated.View>
 
+          {/* Low light (TC-MOB-026). Android only: this is driven by the
+              hardware ambient-light sensor, which iOS does not expose. It
+              names the flash because that is the action available. */}
+          {isLowLight && (
+            <View style={styles.lowLightBanner}>
+              <ZapOff size={16} color={COLORS.warning} />
+              <View style={styles.lowLightText}>
+                <Text style={styles.lowLightTitle}>{t(LOW_LIGHT_KEY)}</Text>
+                <Text style={styles.lowLightHint}>{t(LOW_LIGHT_HINT_KEY)}</Text>
+              </View>
+            </View>
+          )}
+
           {/* Aiming guidance. Static by design — see the note above. */}
           <View style={styles.edgeStatus}>
             <Text style={styles.edgeStatusText}>
@@ -1354,6 +1429,35 @@ const createStyles = (COLORS: Palette) =>
   // blocked rather than ignored.
   captureButtonBusy: {
     opacity: 0.5,
+  },
+
+  lowLightBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: SPACING.sm,
+    alignSelf: 'center',
+    marginBottom: SPACING.md,
+    paddingVertical: SPACING.sm,
+    paddingHorizontal: SPACING.md,
+    borderRadius: BORDER_RADIUS.md,
+    // Fixed dark scrim rather than a theme colour: this sits over the camera
+    // preview, which is not a themed surface.
+    backgroundColor: 'rgba(0,0,0,0.7)',
+  },
+
+  lowLightText: {
+    flexShrink: 1,
+  },
+
+  lowLightTitle: {
+    color: COLORS.warning,
+    fontSize: FONT_SIZES.sm,
+    fontWeight: '600',
+  },
+
+  lowLightHint: {
+    color: '#ffffff',
+    fontSize: FONT_SIZES.xs,
   },
   captureButtonInner: {
     width: 60,

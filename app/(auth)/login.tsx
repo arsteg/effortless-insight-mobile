@@ -10,7 +10,6 @@ import {
   ScrollView,
   TouchableOpacity,
   KeyboardAvoidingView,
-  Platform,
 } from 'react-native';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { useForm, Controller } from 'react-hook-form';
@@ -242,7 +241,7 @@ export default function LoginScreen() {
   return (
     <KeyboardAvoidingView
       style={styles.container}
-      behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+      behavior="padding"
     >
       <ScrollView
         contentContainerStyle={styles.scrollContent}

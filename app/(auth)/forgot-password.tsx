@@ -8,7 +8,6 @@ import {
   Text,
   StyleSheet,
   KeyboardAvoidingView,
-  Platform,
   TouchableOpacity,
 } from 'react-native';
 import { useRouter } from 'expo-router';
@@ -94,7 +93,7 @@ export default function ForgotPasswordScreen() {
   return (
     <KeyboardAvoidingView
       style={styles.container}
-      behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+      behavior="padding"
     >
       <View style={styles.content}>
         {/* Back Button */}

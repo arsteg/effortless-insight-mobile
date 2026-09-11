@@ -70,6 +70,10 @@ import { getCachedNoticeDetailAge } from '../../src/services/storage/cache';
 import { getOfflinePreferences } from '../../src/services/offlinePreferences';
 import { shouldAutoSaveDocumentNow } from '../../src/utils/offlinePreferences';
 import {
+  openLocalDocument,
+  canOpenLocalDocument,
+} from '../../src/services/documentViewer';
+import {
   getCachedDocument,
   cacheDocument,
   touchDocument,
@@ -302,16 +306,21 @@ export default function NoticeDetailScreen() {
       fileName: string;
       fetchUrl: () => Promise<{ url?: string }>;
     }) => {
-      // Always opened from the remote URL. `WebBrowser.openBrowserAsync`
-      // handles http/https only and fails on a `file://` path, and this build
-      // has no module that can render a local file — so the download cache
-      // cannot serve the view itself yet (TC-MOB-057).
+      // A cached copy opens in the device's own viewer, online or off. This is
+      // the only path that works offline, so it is tried first (TC-MOB-057).
+      const cached = await getCachedDocument(noticeId, params.attachmentId);
+      if (cached && canOpenLocalDocument) {
+        if (await openLocalDocument(cached.localUri, params.fileName)) {
+          void touchDocument(noticeId, params.attachmentId);
+          return;
+        }
+      }
+
       if (!isOnline) {
-        const cached = await getCachedDocument(noticeId, params.attachmentId);
         Alert.alert(
           'Not available offline',
           cached
-            ? 'This document is saved on your device, but opening it needs an internet connection in this build.'
+            ? 'This document is saved on your device, but no app is installed that can open it.'
             : NOT_CACHED_OFFLINE_MESSAGE
         );
         return;
@@ -321,6 +330,32 @@ export default function NoticeDetailScreen() {
       if (!result.url) {
         Alert.alert(t('noticeDetail.error'), t('noticeDetail.downloadUrlNotAvailable'));
         return;
+      }
+
+      // Android: download first, then hand the file to a real viewer.
+      //
+      // `WebBrowser.openBrowserAsync` opens a Chrome Custom Tab, which cannot
+      // render a PDF — Chrome passes it to the download manager and leaves an
+      // empty tab, which is what users saw (TC-MOB-038). Downloading also gets
+      // pinch-zoom and paging from the viewer app, and leaves the document
+      // available offline.
+      if (canOpenLocalDocument) {
+        const downloaded = await cacheDocument({
+          noticeId,
+          attachmentId: params.attachmentId,
+          fileName: params.fileName,
+          url: result.url,
+        });
+
+        if (downloaded && (await openLocalDocument(downloaded.localUri, params.fileName))) {
+          void touchDocument(noticeId, params.attachmentId);
+          return;
+        }
+
+        Alert.alert(
+          'No document viewer',
+          'No app on this device can open this file. It will open in your browser instead — installing a PDF viewer gives a better experience.'
+        );
       }
 
       await WebBrowser.openBrowserAsync(result.url, {
@@ -342,7 +377,7 @@ export default function NoticeDetailScreen() {
         });
       }
     },
-    [noticeId, isOnline]
+    [noticeId, isOnline, connectionType]
   );
 
   const handleViewOriginalPdf = async () => {
@@ -1271,7 +1306,7 @@ function ResponseTab({ response, noticeId }: { response: ResponseDto | null | un
         onRequestClose={() => setShowSubmitModal(false)}
       >
         <KeyboardAvoidingView
-          behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+          behavior="padding"
           style={styles.modalOverlay}
         >
           <View style={styles.submitModalContent}>
@@ -1437,7 +1472,7 @@ function TasksTab({ tasks, noticeId }: { tasks: TaskDto[]; noticeId: string }) {
         onRequestClose={() => setShowCreateModal(false)}
       >
         <KeyboardAvoidingView
-          behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+          behavior="padding"
           style={styles.modalOverlay}
         >
           <View style={styles.createTaskModal}>
@@ -1922,7 +1957,7 @@ function DocumentRequestsTab({
         onRequestClose={() => setShowUploadModal(false)}
       >
         <KeyboardAvoidingView
-          behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+          behavior="padding"
           style={styles.modalOverlay}
         >
           <View style={styles.uploadModal}>

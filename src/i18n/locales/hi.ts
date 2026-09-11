@@ -352,6 +352,10 @@ export default {
     enhance: 'Enhance:',
     openSettings: 'Open Settings',
     uploadAnother: 'Upload Another',
+    lowLightDetected: 'Low light detected',
+    lowLightHint: 'Turn on the flash — scan quality may be affected.',
+    darkScanTitle: 'This scan looks dark',
+    darkScanBody: 'Low light can make the text hard to read. Try again with the flash on, or keep it if it looks fine.',
     preparingPages: 'Preparing pages',
     viewNotices: 'View Notices',
     tryAgain: 'Try Again',
@@ -369,6 +373,13 @@ export default {
 
   // Profile
   profile: {
+    cancel: 'Cancel',
+    profilePhoto: 'Profile photo',
+    takePhoto: 'Take Photo',
+    chooseFromLibrary: 'Choose from Library',
+    removePhoto: 'Remove Photo',
+    avatarUpdated: 'Profile photo updated',
+    avatarRemoved: 'Profile photo removed',
     title: 'प्रोफ़ाइल',
     editProfile: 'प्रोफ़ाइल संपादित करें',
     changePassword: 'पासवर्ड बदलें',
@@ -624,6 +635,8 @@ export default {
     title: 'Title',
     notice: 'Notice',
     priority: 'Priority',
+    dueDate: 'Due date',
+    noDueDate: 'No due date',
     cancel: 'Cancel',
     chooseANotice: 'Choose a notice',
     noNoticesFound: 'No notices found',

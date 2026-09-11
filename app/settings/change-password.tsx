@@ -11,7 +11,6 @@ import {
   ScrollView,
   Alert,
   KeyboardAvoidingView,
-  Platform,
 } from 'react-native';
 import { Stack, useRouter } from 'expo-router';
 import { Shield, CheckCircle } from 'lucide-react-native';
@@ -111,7 +110,7 @@ export default function ChangePasswordScreen() {
 
       <KeyboardAvoidingView
         style={styles.container}
-        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+        behavior="padding"
       >
         <ScrollView
           style={styles.scrollView}

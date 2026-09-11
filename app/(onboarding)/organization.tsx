@@ -12,7 +12,6 @@ import {
   TextInput,
   TouchableOpacity,
   KeyboardAvoidingView,
-  Platform,
   Alert,
   ActivityIndicator,
 } from 'react-native';
@@ -183,7 +182,7 @@ export default function OrganizationScreen() {
   return (
     <KeyboardAvoidingView
       style={styles.container}
-      behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+      behavior="padding"
     >
       <ScrollView
         contentContainerStyle={styles.scrollContent}

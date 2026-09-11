@@ -10,7 +10,6 @@ import {
   TextInput,
   TouchableOpacity,
   KeyboardAvoidingView,
-  Platform,
   BackHandler,
 } from 'react-native';
 import { useRouter } from 'expo-router';
@@ -163,7 +162,7 @@ export default function TwoFactorScreen() {
   return (
     <KeyboardAvoidingView
       style={styles.container}
-      behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+      behavior="padding"
     >
       <View style={styles.content}>
         {/* Back Button */}

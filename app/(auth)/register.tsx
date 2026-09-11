@@ -10,7 +10,6 @@ import {
   ScrollView,
   TouchableOpacity,
   KeyboardAvoidingView,
-  Platform,
   Linking,
 } from 'react-native';
 import { useRouter } from 'expo-router';
@@ -293,7 +292,7 @@ export default function RegisterScreen() {
   return (
     <KeyboardAvoidingView
       style={styles.container}
-      behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+      behavior="padding"
     >
       <ScrollView
         contentContainerStyle={styles.scrollContent}

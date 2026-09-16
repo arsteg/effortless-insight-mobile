@@ -379,10 +379,29 @@ export function usePaywall(action: PaywallAction): {
   refetch: () => void;
 } {
   const { data, isLoading, isError, refetch } = useUsageCheck(action);
+  const isOnline = useUIStore((state) => state.isOnline);
 
   if (isLoading) {
     return {
       isLoading: true,
+      paywall: null,
+      refetch,
+    };
+  }
+
+  // Offline, the limit check ALWAYS errors — there is no network to ask. Failing
+  // closed there blocked the whole offline capture flow: the scanner showed
+  // "We couldn't verify your plan limits. Please check your connection" instead
+  // of queueing the scan, so in airplane mode you could not scan at all
+  // (TC-MOB-058).
+  //
+  // Letting it through costs nothing: an offline scan is queued, not uploaded,
+  // and the server re-checks the quota when the queue drains. The fail-closed
+  // branch below still applies to a real online failure, which is what it was
+  // written for.
+  if (!isOnline) {
+    return {
+      isLoading: false,
       paywall: null,
       refetch,
     };

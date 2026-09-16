@@ -11,6 +11,8 @@ import {
   TouchableOpacity,
   Switch,
   Alert,
+  Image,
+  ActivityIndicator,
 } from 'react-native';
 import { useRouter, useFocusEffect } from 'expo-router';
 import {
@@ -33,6 +35,7 @@ import {
   Info,
   LifeBuoy,
   Trash2,
+  Camera,
   ExternalLink,
   CreditCard,
   Link2,
@@ -40,6 +43,14 @@ import {
 import * as WebBrowser from 'expo-web-browser';
 import * as Linking from 'expo-linking';
 import { useAuthStore, useOfflineStore, useUIStore } from '../../src/stores';
+import { usersApi, getApiErrorMessage } from '../../src/services/api';
+import {
+  takeAvatarPhoto,
+  pickAvatarFromLibrary,
+  permissionMessage,
+  AVATAR_MIME,
+  type AvatarPickResult,
+} from '../../src/services/avatar';
 import {
   getCacheSize,
   getCachedCount,
@@ -89,7 +100,11 @@ export default function ProfileScreen() {
     biometricAvailable,
     enableBiometric,
     disableBiometric,
+    refreshProfile,
   } = useAuthStore();
+
+  const [avatarBusy, setAvatarBusy] = useState(false);
+  const showToast = useUIStore((state) => state.showToast);
 
   const { queueTotal, clearAllCache, clearAllQueue, loadCacheStatus, loadQueueStatus } =
     useOfflineStore();
@@ -298,15 +313,95 @@ export default function ProfileScreen() {
     return <LoadingSpinner fullScreen />;
   }
 
+  /**
+   * Offer both sources, then upload. The picker's `allowsEditing` with a 1:1
+   * aspect gives the square crop; the circular mask is `avatar`'s overflow.
+   */
+  const handleChangeAvatar = () => {
+    const run = async (pick: () => Promise<AvatarPickResult>) => {
+      const picked = await pick();
+      if (picked.status === 'cancelled') return;
+      if (picked.status === 'permission-denied') {
+        Alert.alert('Permission needed', permissionMessage(picked.source), [
+          { text: 'Open Settings', onPress: () => Linking.openSettings() },
+          { text: 'Cancel', style: 'cancel' },
+        ]);
+        return;
+      }
+
+      setAvatarBusy(true);
+      try {
+        await usersApi.uploadAvatar({
+          uri: picked.uri,
+          type: AVATAR_MIME,
+          name: 'avatar.jpg',
+        });
+        // Re-read rather than patching locally: the server returns the stored
+        // URL, and the profile is shared with every other screen.
+        await refreshProfile();
+        showToast('success', t('profile.avatarUpdated'));
+      } catch (error) {
+        showToast('error', getApiErrorMessage(error));
+      } finally {
+        setAvatarBusy(false);
+      }
+    };
+
+    const options: Parameters<typeof Alert.alert>[2] = [
+      { text: t('profile.takePhoto'), onPress: () => void run(takeAvatarPhoto) },
+      { text: t('profile.chooseFromLibrary'), onPress: () => void run(pickAvatarFromLibrary) },
+    ];
+
+    if (user?.avatarUrl) {
+      options.push({
+        text: t('profile.removePhoto'),
+        style: 'destructive',
+        onPress: () => {
+          setAvatarBusy(true);
+          usersApi
+            .deleteAvatar()
+            .then(() => refreshProfile())
+            .then(() => showToast('success', t('profile.avatarRemoved')))
+            .catch((error) => showToast('error', getApiErrorMessage(error)))
+            .finally(() => setAvatarBusy(false));
+        },
+      });
+    }
+
+    options.push({ text: t('profile.cancel'), style: 'cancel' });
+    Alert.alert(t('profile.profilePhoto'), undefined, options);
+  };
+
   return (
     <ScrollView style={styles.container} showsVerticalScrollIndicator={false}>
       {/* Profile Header */}
       <View style={styles.header}>
-        <View style={styles.avatar}>
-          <Text style={styles.avatarText}>
-            {user?.name?.charAt(0).toUpperCase() || 'U'}
-          </Text>
-        </View>
+        {/* Tappable: the avatar was display-only, with no way to set a
+            picture at all (TC-MOB-064). */}
+        <TouchableOpacity
+          onPress={handleChangeAvatar}
+          disabled={avatarBusy}
+          accessibilityRole="button"
+          accessibilityLabel={user?.avatarUrl ? 'Change profile photo' : 'Add a profile photo'}
+        >
+          <View style={styles.avatar}>
+            {user?.avatarUrl ? (
+              <Image source={{ uri: user.avatarUrl }} style={styles.avatarImage} />
+            ) : (
+              <Text style={styles.avatarText}>
+                {user?.name?.charAt(0).toUpperCase() || 'U'}
+              </Text>
+            )}
+            {avatarBusy && (
+              <View style={styles.avatarBusy}>
+                <ActivityIndicator color={COLORS.white} />
+              </View>
+            )}
+          </View>
+          <View style={styles.avatarBadge}>
+            <Camera size={14} color={COLORS.white} />
+          </View>
+        </TouchableOpacity>
         <Text style={styles.userName}>{user?.name || 'User'}</Text>
         <Text style={styles.userEmail}>{user?.email || ''}</Text>
         <View style={styles.roleBadge}>
@@ -657,7 +752,38 @@ const createStyles = (COLORS: Palette) =>
     justifyContent: 'center',
     alignItems: 'center',
     marginBottom: SPACING.md,
+    // Clips the photo to the circle — this is the "cropped to circle" the
+    // avatar has always implied for initials (TC-MOB-064).
+    overflow: 'hidden',
   },
+  // Fills the circle; overflow:hidden on `avatar` does the round masking.
+  avatarImage: {
+    width: '100%',
+    height: '100%',
+  },
+
+  avatarBusy: {
+    ...StyleSheet.absoluteFill,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'rgba(0,0,0,0.35)',
+  },
+
+  // Signals the avatar is editable without a separate button.
+  avatarBadge: {
+    position: 'absolute',
+    right: 0,
+    bottom: 0,
+    width: 26,
+    height: 26,
+    borderRadius: 13,
+    backgroundColor: COLORS.primary,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 2,
+    borderColor: COLORS.white,
+  },
+
   avatarText: {
     fontSize: 32,
     fontWeight: 'bold',

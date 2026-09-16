@@ -11,7 +11,6 @@ import {
   TouchableOpacity,
   ActivityIndicator,
   KeyboardAvoidingView,
-  Platform,
 } from 'react-native';
 import { Stack, useRouter, useLocalSearchParams } from 'expo-router';
 import { KeyRound, RefreshCw, CheckCircle, Clock } from 'lucide-react-native';
@@ -165,7 +164,7 @@ export default function GstnOtpScreen() {
 
       <KeyboardAvoidingView
         style={styles.container}
-        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+        behavior="padding"
       >
         <View style={styles.content}>
           {/* Header */}

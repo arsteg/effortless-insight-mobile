@@ -9,3 +9,4 @@ export { tasksApi } from './tasks';
 export { notificationsApi } from './notifications';
 export { billingApi } from './billing';
 export { organizationsApi } from './organizations';
+export { usersApi } from './users';

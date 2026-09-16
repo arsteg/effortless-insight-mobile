@@ -12,7 +12,6 @@ import {
   TouchableOpacity,
   Alert,
   KeyboardAvoidingView,
-  Platform,
 } from 'react-native';
 import { Stack, useRouter } from 'expo-router';
 import { User, Phone, Camera, X } from 'lucide-react-native';
@@ -103,7 +102,7 @@ export default function EditProfileScreen() {
 
       <KeyboardAvoidingView
         style={styles.container}
-        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+        behavior="padding"
       >
         <ScrollView
           style={styles.scrollView}

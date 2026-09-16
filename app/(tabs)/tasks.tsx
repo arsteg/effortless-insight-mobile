@@ -27,11 +27,13 @@ import {
   XCircle,
   Check,
   X,
+  Plus,
 } from 'lucide-react-native';
 import { useMyTasksInfinite, useUpdateTask } from '../../src/hooks/useTasks';
 import { LoadingSpinner, EmptyState } from '../../src/components/common';
 import { useUIStore } from '../../src/stores';
 import { cancelTaskReminders, scheduleTaskReminders } from '../../src/services/taskReminders';
+import { AddTaskSheet } from '../../src/components/tasks/AddTaskSheet';
 import { MyTaskDto, TaskStatus, TaskPriority } from '../../src/types';
 import {
   TASK_STATUSES,
@@ -79,6 +81,7 @@ export default function TasksScreen() {
   const [selectedFilter, setSelectedFilter] = useState<string>('all');
   const [selectedPriority, setSelectedPriority] = useState<string>('all');
   const [sortBy, setSortBy] = useState<TaskSort>('priority');
+  const [showAddTask, setShowAddTask] = useState(false);
   const [sortMenuOpen, setSortMenuOpen] = useState(false);
   const [priorityMenuOpen, setPriorityMenuOpen] = useState(false);
   const [statusPickerFor, setStatusPickerFor] = useState<MyTaskDto | null>(null);
@@ -345,6 +348,27 @@ export default function TasksScreen() {
         onEndReached={handleLoadMore}
         onEndReachedThreshold={0.5}
         showsVerticalScrollIndicator={false}
+      />
+
+      {/* The task list had no way to add a task at all: creation only existed
+          on the notice screen and the calendar, so "Tap Create Task" from the
+          task list had nowhere to happen (TC-MOB-044). */}
+      <TouchableOpacity
+        style={styles.fab}
+        onPress={() => setShowAddTask(true)}
+        accessibilityRole="button"
+        accessibilityLabel="Create task"
+      >
+        <Plus size={26} color={COLORS.white} />
+      </TouchableOpacity>
+
+      <AddTaskSheet
+        visible={showAddTask}
+        onClose={() => setShowAddTask(false)}
+        onCreated={() => {
+          setShowAddTask(false);
+          void refetch();
+        }}
       />
 
       <SortMenu
@@ -676,6 +700,24 @@ function StatusPicker({
 
 const createStyles = (COLORS: Palette) =>
   StyleSheet.create({
+  // Bottom-right, clear of the tab bar, so it never sits over the last row.
+  fab: {
+    position: 'absolute',
+    right: SPACING.lg,
+    bottom: SPACING.lg,
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    backgroundColor: COLORS.primary,
+    alignItems: 'center',
+    justifyContent: 'center',
+    elevation: 4,
+    shadowColor: '#000',
+    shadowOpacity: 0.25,
+    shadowRadius: 6,
+    shadowOffset: { width: 0, height: 3 },
+  },
+
   container: {
     flex: 1,
     backgroundColor: COLORS.gray[50],

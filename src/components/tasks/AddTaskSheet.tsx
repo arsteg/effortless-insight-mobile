@@ -19,9 +19,9 @@ import {
   ScrollView,
   ActivityIndicator,
   KeyboardAvoidingView,
-  Platform,
 } from 'react-native';
-import { X, Search, FileText, Check, ChevronLeft } from 'lucide-react-native';
+import { X, Search, FileText, Check, ChevronLeft, Calendar } from 'lucide-react-native';
+import { DatePickerSheet } from '../common/DatePickerSheet';
 import { useNotices } from '../../hooks/useNotices';
 import { useCreateTask } from '../../hooks/useTasks';
 import { useUIStore } from '../../stores';
@@ -43,7 +43,12 @@ import { useTranslation } from '../../hooks';
 
 interface AddTaskSheetProps {
   visible: boolean;
-  /** ISO instant the task should be due — the date the user tapped. */
+  /**
+   * Due date to start from — the day tapped on the calendar. Only a starting
+   * value: the sheet is also opened from the task list with nothing selected,
+   * so the date has to be editable here rather than fixed by the caller
+   * (TC-MOB-044).
+   */
   dueDate?: string;
   onClose: () => void;
   onCreated?: () => void;
@@ -65,6 +70,13 @@ export function AddTaskSheet({ visible, dueDate, onClose, onCreated }: AddTaskSh
   const [priority, setPriority] = useState<string>('medium');
   const [notice, setNotice] = useState<PickedNotice | null>(null);
   const [pickingNotice, setPickingNotice] = useState(false);
+  const [due, setDue] = useState<string | undefined>(dueDate);
+  const [showDuePicker, setShowDuePicker] = useState(false);
+
+  // Follow the caller's date when the sheet is reopened on a different day.
+  React.useEffect(() => {
+    if (visible) setDue(dueDate);
+  }, [visible, dueDate]);
 
   const titleError = validateTaskTitle(title);
   const canSubmit = isTaskTitleSubmittable(title) && !!notice && !createTask.isPending;
@@ -74,6 +86,8 @@ export function AddTaskSheet({ visible, dueDate, onClose, onCreated }: AddTaskSh
     setPriority('medium');
     setNotice(null);
     setPickingNotice(false);
+    setDue(dueDate);
+    setShowDuePicker(false);
   };
 
   const close = () => {
@@ -90,7 +104,7 @@ export function AddTaskSheet({ visible, dueDate, onClose, onCreated }: AddTaskSh
         data: {
           title: title.trim(),
           priority: priority as never,
-          dueDate,
+          dueDate: due,
           // Omitted so the server assigns the creator; [] fails validation.
         },
       });
@@ -99,7 +113,7 @@ export function AddTaskSheet({ visible, dueDate, onClose, onCreated }: AddTaskSh
       const scheduled = await scheduleTaskReminders(
         created.id,
         created.title,
-        dueDate,
+        due,
         priority
       );
 
@@ -118,7 +132,7 @@ export function AddTaskSheet({ visible, dueDate, onClose, onCreated }: AddTaskSh
   return (
     <Modal visible={visible} transparent animationType="slide" onRequestClose={close}>
       <KeyboardAvoidingView
-        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+        behavior="padding"
         style={styles.overlay}
       >
         <View style={styles.sheet}>
@@ -135,7 +149,7 @@ export function AddTaskSheet({ visible, dueDate, onClose, onCreated }: AddTaskSh
               <View style={styles.header}>
                 <View style={styles.headerText}>
                   <Text style={styles.title}>{t('components.newTask')}</Text>
-                  {dueDate && <Text style={styles.subtitle}>Due {formatDueDate(dueDate)}</Text>}
+                  {due && <Text style={styles.subtitle}>Due {formatDueDate(due)}</Text>}
                 </View>
                 <TouchableOpacity
                   onPress={close}
@@ -173,6 +187,32 @@ export function AddTaskSheet({ visible, dueDate, onClose, onCreated }: AddTaskSh
                     {notice?.label ?? 'Choose a notice'}
                   </Text>
                 </TouchableOpacity>
+
+                <Text style={styles.label}>{t('components.dueDate')}</Text>
+                <View style={styles.dueRow}>
+                  <TouchableOpacity
+                    style={[styles.picker, styles.duePicker]}
+                    onPress={() => setShowDuePicker(true)}
+                    accessibilityRole="button"
+                    accessibilityLabel={due ? `Due ${formatDueDate(due)}. Change` : 'Set a due date'}
+                  >
+                    <Calendar size={16} color={COLORS.gray[500]} />
+                    <Text style={[styles.pickerText, !due && styles.pickerPlaceholder]}>
+                      {due ? formatDueDate(due) : t('components.noDueDate')}
+                    </Text>
+                  </TouchableOpacity>
+                  {due && (
+                    <TouchableOpacity
+                      onPress={() => setDue(undefined)}
+                      style={styles.clearDue}
+                      accessibilityRole="button"
+                      accessibilityLabel="Clear due date"
+                      hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                    >
+                      <X size={16} color={COLORS.gray[500]} />
+                    </TouchableOpacity>
+                  )}
+                </View>
 
                 <Text style={styles.label}>{t('components.priority')}</Text>
                 <View style={styles.priorityRow}>
@@ -225,6 +265,19 @@ export function AddTaskSheet({ visible, dueDate, onClose, onCreated }: AddTaskSh
             </>
           )}
         </View>
+        {/*
+          Nested INSIDE this modal on purpose. iOS presents one modal at a
+          time, so a sibling <Modal> opened while this sheet is up never
+          appears — the picker would silently do nothing and the due date stay
+          unset. That exact bug already bit the notice-screen form (TC-MOB-044).
+        */}
+        <DatePickerSheet
+          visible={showDuePicker}
+          value={due}
+          disablePast
+          onClose={() => setShowDuePicker(false)}
+          onSelect={setDue}
+        />
       </KeyboardAvoidingView>
     </Modal>
   );
@@ -374,6 +427,20 @@ const createStyles = (COLORS: Palette) =>
     color: COLORS.error,
     marginTop: SPACING.xs,
   },
+  dueRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: SPACING.sm,
+  },
+
+  duePicker: {
+    flex: 1,
+  },
+
+  clearDue: {
+    padding: SPACING.xs,
+  },
+
   picker: {
     flexDirection: 'row',
     alignItems: 'center',

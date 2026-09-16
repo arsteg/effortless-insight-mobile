@@ -211,7 +211,7 @@ const createStyles = (COLORS: Palette) =>
     flexDirection: 'row',
     alignItems: 'center',
     gap: SPACING.sm,
-    backgroundColor: '#fef2f2',
+    backgroundColor: COLORS.coralLight,
     padding: SPACING.md,
     borderRadius: BORDER_RADIUS.md,
     marginTop: SPACING.md,

@@ -25,6 +25,27 @@ export interface Palette {
   warning: string;
   error: string;
   info: string;
+  /**
+   * Calm Intelligence accent families (see ../../DESIGN_SYSTEM.md). Each owns a
+   * domain meaning: mint = success/low-risk, coral = high-risk/urgent,
+   * amber = medium-risk/pending, lavender = AI/analysis. The `*Light` values are
+   * the soft tint backgrounds (dark low-luminance versions in the dark palette).
+   */
+  mint: string;
+  mintLight: string;
+  coral: string;
+  coralLight: string;
+  amber: string;
+  amberLight: string;
+  lavender: string;
+  lavenderLight: string;
+  /** Risk-level color language, shared with web + admin. */
+  risk: {
+    low: string;
+    medium: string;
+    high: string;
+    critical: string;
+  };
   /** Card / elevated surface. Named for its role, not its literal colour. */
   white: string;
   black: string;
@@ -43,67 +64,93 @@ export interface Palette {
 }
 
 export const LIGHT_PALETTE: Palette = {
-  primary: '#0ea5e9',
-  primaryLight: '#e0f2fe',
-  primaryDark: '#0284c7',
-  secondary: '#6366f1',
-  success: '#10b981',
-  warning: '#f59e0b',
-  error: '#ef4444',
-  info: '#3b82f6',
+  primary: '#0e93e0', // refined azure — brand
+  primaryLight: '#eaf5fd',
+  primaryDark: '#0a78bd',
+  secondary: '#7f5fdd', // lavender
+  success: '#1f9968', // mint
+  warning: '#e08d17', // amber
+  error: '#e8563e', // coral (warm, not harsh red)
+  info: '#0e93e0',
+  mint: '#1f9968',
+  mintLight: '#e6f6ef',
+  coral: '#e8563e',
+  coralLight: '#fdeee9',
+  amber: '#e08d17',
+  amberLight: '#fdf4e3',
+  lavender: '#7f5fdd',
+  lavenderLight: '#f1eefc',
+  risk: {
+    low: '#1f9968',
+    medium: '#e08d17',
+    high: '#e8563e',
+    critical: '#cf3d28',
+  },
+  // Card surface — near-white for a crisp lift off the warm page.
   white: '#ffffff',
   black: '#000000',
   gray: {
-    50: '#f9fafb',
-    100: '#f3f4f6',
-    200: '#e5e7eb',
-    300: '#d1d5db',
-    400: '#9ca3af',
-    500: '#6b7280',
+    // Warm neutrals for surfaces; readable cool slate for text.
+    50: '#fbfaf6', // warm paper — page behind cards
+    100: '#f4f1ea', // subtle fills: chips, inactive tabs, search bars
+    200: '#e9e5dc', // borders and dividers
+    300: '#d8d2c6',
+    400: '#a8a296', // muted icons / placeholder
+    500: '#6b7280', // muted text
     600: '#4b5563',
     700: '#374151',
-    800: '#1f2937',
-    900: '#111827',
+    800: '#262d3d',
+    900: '#1b2338', // ink navy — primary text
   },
 };
 
 export const DARK_PALETTE: Palette = {
-  // Primary stays put: it is the brand, it carries the same meaning in both
-  // themes, and it clears 4.5:1 against the dark surfaces below.
-  primary: '#0ea5e9',
-  // The light tint would glare on a dark ground; this is the same hue at low
-  // luminance, so "primary-tinted background" still reads as tinted.
-  primaryLight: '#0c4a6e',
-  primaryDark: '#38bdf8',
-  secondary: '#818cf8',
-  // Status colours lifted a step: the light-mode values are tuned for contrast
-  // against white and go muddy on near-black.
-  success: '#34d399',
-  warning: '#fbbf24',
-  error: '#f87171',
-  info: '#60a5fa',
+  // Brand azure, lifted for contrast against dark surfaces.
+  primary: '#3aaeee',
+  // The light tint would glare on a dark ground; low-luminance azure instead.
+  primaryLight: '#0d4f7b',
+  primaryDark: '#74bcef',
+  secondary: '#b19cf0', // lavender, lifted
+  // Accent/status colours lifted a step for contrast on near-black.
+  success: '#5ec69b', // mint
+  warning: '#f0b451', // amber
+  error: '#f28a72', // coral
+  info: '#74bcef',
+  mint: '#5ec69b',
+  mintLight: '#0d4d37',
+  coral: '#f28a72',
+  coralLight: '#5a2418',
+  amber: '#f0b451',
+  amberLight: '#4a3410',
+  lavender: '#b19cf0',
+  lavenderLight: '#362a63',
+  risk: {
+    low: '#5ec69b',
+    medium: '#f0b451',
+    high: '#f28a72',
+    critical: '#ee6a54',
+  },
 
-  // `white` is the card surface. Slate-900, one step above the page behind it,
-  // because a card the same colour as its background is not a card.
-  white: '#0f172a',
+  // `white` is the card surface — one calm step above the page behind it.
+  white: '#161d2f',
   // `black` is used for shadows; it stays black so elevation still reads.
   black: '#000000',
 
   gray: {
-    // The page behind cards — darkest, matching the web's --background.
-    50: '#020817',
+    // The page behind cards — a deep calm navy (not pure black).
+    50: '#0d1220',
     // Subtle fills: chips, inactive tabs, search bars.
-    100: '#1e293b',
+    100: '#1c2436',
     // Borders and dividers.
-    200: '#1e293b',
-    300: '#334155',
-    // Muted text — the web's --muted-foreground.
+    200: '#263041',
+    300: '#384254',
+    // Muted text.
     400: '#94a3b8',
     500: '#cbd5e1',
     600: '#e2e8f0',
     700: '#f1f5f9',
     800: '#f8fafc',
-    // Primary text — the web's --foreground.
+    // Primary text.
     900: '#f8fafc',
   },
 };

@@ -63,63 +63,65 @@ export const PAGINATION = {
   MAX_PAGE_SIZE: 50,
 } as const;
 
-// Risk Level Colors
+// Risk Level Colors — Calm Intelligence domain language (mint/amber/coral).
+// Kept in sync with the theme risk map in src/theme/palettes.ts.
 export const RISK_COLORS = {
-  critical: "#ef4444",
-  high: "#f97316",
-  medium: "#eab308",
-  low: "#22c55e",
+  critical: "#cf3d28",
+  high: "#e8563e",
+  medium: "#e08d17",
+  low: "#1f9968",
 } as const;
 
 // Priority Colors
 export const PRIORITY_COLORS = {
-  critical: "#ef4444",
-  high: "#f97316",
-  medium: "#eab308",
-  low: "#22c55e",
+  critical: "#cf3d28",
+  high: "#e8563e",
+  medium: "#e08d17",
+  low: "#1f9968",
 } as const;
 
-// Status Colors
+// Status Colors — mapped onto the accent families.
 export const STATUS_COLORS = {
   // Notice statuses
   uploaded: "#6b7280",
-  processing: "#3b82f6",
-  analyzed: "#8b5cf6",
-  in_progress: "#f59e0b",
-  responded: "#10b981",
+  processing: "#0e93e0", // azure
+  analyzed: "#7f5fdd", // lavender (AI)
+  in_progress: "#e08d17", // amber
+  responded: "#1f9968", // mint
   closed: "#6b7280",
-  archived: "#9ca3af",
-  failed: "#ef4444",
+  archived: "#a8a296",
+  failed: "#e8563e", // coral
   // Task statuses
   todo: "#6b7280",
-  done: "#10b981",
-  blocked: "#ef4444",
-  on_hold: "#f59e0b",
+  done: "#1f9968",
+  blocked: "#e8563e",
+  on_hold: "#e08d17",
 } as const;
 
-// Design System
+// Design System — legacy static palette. Mirrors the light Calm Intelligence
+// palette so any screen still importing this (rather than useColors) matches.
 export const COLORS = {
-  primary: "#0ea5e9",
-  primaryLight: "#e0f2fe",
-  primaryDark: "#0284c7",
-  secondary: "#6366f1",
-  success: "#10b981",
-  warning: "#f59e0b",
-  error: "#ef4444",
-  info: "#3b82f6",
+  primary: "#0e93e0",
+  primaryLight: "#eaf5fd",
+  primaryDark: "#0a78bd",
+  secondary: "#7f5fdd",
+  success: "#1f9968",
+  warning: "#e08d17",
+  error: "#e8563e",
+  info: "#0e93e0",
   white: "#ffffff",
   black: "#000000",
   gray: {
-    50: "#f9fafb",
-    100: "#f3f4f6",
-    200: "#e5e7eb",
-    300: "#d1d5db",
-    400: "#9ca3af",
+    50: "#fbfaf6",
+    100: "#f4f1ea",
+    200: "#e9e5dc",
+    300: "#d8d2c6",
+    400: "#a8a296",
     500: "#6b7280",
     600: "#4b5563",
     700: "#374151",
-    800: "#1f2937",
-    900: "#111827",
+    800: "#262d3d",
+    900: "#1b2338",
   },
 } as const;
 

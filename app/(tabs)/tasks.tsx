@@ -764,7 +764,7 @@ const createStyles = (COLORS: Palette) =>
     marginBottom: SPACING.sm,
     borderRadius: BORDER_RADIUS.lg,
     padding: SPACING.md,
-    shadowColor: '#000',
+    shadowColor: COLORS.black,
     shadowOffset: { width: 0, height: 1 },
     shadowOpacity: 0.05,
     shadowRadius: 2,

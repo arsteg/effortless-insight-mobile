@@ -333,7 +333,7 @@ const createStyles = (COLORS: Palette) =>
     alignItems: 'center',
     marginBottom: SPACING.md,
     padding: SPACING.sm,
-    backgroundColor: '#fef2f2',
+    backgroundColor: COLORS.coralLight,
     borderRadius: BORDER_RADIUS.md,
   },
   expiryWarningText: {

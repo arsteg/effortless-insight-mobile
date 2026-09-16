@@ -39,6 +39,7 @@ import {
   Eye,
   File,
   Image,
+  Sparkles,
 } from 'lucide-react-native';
 import { useUIStore, useAuthStore } from '../../src/stores';
 import { getApiErrorMessage } from '../../src/services/api';
@@ -711,8 +712,9 @@ function NoticeHeader({
         </View>
         <View style={styles.headerActions}>
           {notice.riskLevel && (
-            <View style={[styles.riskBadge, { backgroundColor: getRiskColor(notice.riskLevel) }]}>
-              <Text style={styles.riskText}>
+            <View style={[styles.riskBadge, { backgroundColor: `${getRiskColor(notice.riskLevel)}1A` }]}>
+              <View style={[styles.riskDot, { backgroundColor: getRiskColor(notice.riskLevel) }]} />
+              <Text style={[styles.riskText, { color: getRiskColor(notice.riskLevel) }]}>
                 {notice.riskLevel.toUpperCase()} RISK
               </Text>
             </View>
@@ -956,6 +958,18 @@ function AnalysisTab({ notice }: { notice: NoticeDetailDto }) {
 
   return (
     <View>
+      {/* AI intelligence banner — lavender family marks this as AI-generated,
+          the shared "Calm Intelligence" design language for analysis. */}
+      <View style={styles.aiHero}>
+        <View style={styles.aiHeroIcon}>
+          <Sparkles size={18} color={COLORS.lavender} />
+        </View>
+        <View style={{ flex: 1 }}>
+          <Text style={styles.aiHeroTitle}>{t('analysis.summary')}</Text>
+          <Text style={styles.aiHeroSubtitle}>AI-generated · review before acting</Text>
+        </View>
+      </View>
+
       {/* Risk and deadline lead the tab: both are AI-derived outputs, and
           repeating them here means the analysis stands on its own instead of
           sending the reader back to Overview (TC-MOB-039). */}
@@ -968,10 +982,11 @@ function AnalysisTab({ notice }: { notice: NoticeDetailDto }) {
               <View
                 style={[
                   styles.riskBadge,
-                  { backgroundColor: RISK_COLORS[notice.riskLevel as keyof typeof RISK_COLORS] || COLORS.gray[400] },
+                  { backgroundColor: `${RISK_COLORS[notice.riskLevel as keyof typeof RISK_COLORS] || COLORS.gray[400]}1A` },
                 ]}
               >
-                <Text style={styles.riskText}>{notice.riskLevel.toUpperCase()} RISK</Text>
+                <View style={[styles.riskDot, { backgroundColor: RISK_COLORS[notice.riskLevel as keyof typeof RISK_COLORS] || COLORS.gray[400] }]} />
+                <Text style={[styles.riskText, { color: RISK_COLORS[notice.riskLevel as keyof typeof RISK_COLORS] || COLORS.gray[600] }]}>{notice.riskLevel.toUpperCase()} RISK</Text>
               </View>
             )}
             {notice.riskScore !== undefined && notice.riskScore !== null && (
@@ -2149,14 +2164,21 @@ const createStyles = (COLORS: Palette) =>
     backgroundColor: COLORS.gray[100],
   },
   riskBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
     paddingHorizontal: SPACING.sm,
-    paddingVertical: 4,
-    borderRadius: BORDER_RADIUS.sm,
+    paddingVertical: 5,
+    borderRadius: BORDER_RADIUS.full,
+  },
+  riskDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
   },
   riskText: {
     fontSize: FONT_SIZES.xs,
-    fontWeight: '600',
-    color: COLORS.white,
+    fontWeight: '700',
   },
   viewPdfButton: {
     flexDirection: 'row',
@@ -2394,12 +2416,46 @@ const createStyles = (COLORS: Palette) =>
     fontSize: FONT_SIZES.sm,
     fontWeight: '500',
   },
-  analysisSection: {
+  aiHero: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: SPACING.sm,
+    backgroundColor: COLORS.lavenderLight,
+    borderWidth: 1,
+    borderColor: COLORS.lavender,
+    borderRadius: BORDER_RADIUS.xl,
+    padding: SPACING.md,
     marginBottom: SPACING.lg,
+  },
+  aiHeroIcon: {
+    width: 38,
+    height: 38,
+    borderRadius: 19,
+    backgroundColor: COLORS.white,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  aiHeroTitle: {
+    fontSize: FONT_SIZES.md,
+    fontWeight: '800',
+    color: COLORS.lavender,
+  },
+  aiHeroSubtitle: {
+    fontSize: FONT_SIZES.xs,
+    color: COLORS.gray[500],
+    marginTop: 1,
+  },
+  analysisSection: {
+    backgroundColor: COLORS.white,
+    borderWidth: 1,
+    borderColor: COLORS.gray[200],
+    borderRadius: BORDER_RADIUS.xl,
+    padding: SPACING.md,
+    marginBottom: SPACING.md,
   },
   analysisSectionTitle: {
     fontSize: FONT_SIZES.md,
-    fontWeight: '600',
+    fontWeight: '700',
     color: COLORS.gray[900],
     marginBottom: SPACING.sm,
   },
@@ -2444,7 +2500,7 @@ const createStyles = (COLORS: Palette) =>
     color: COLORS.gray[700],
   },
   mandatoryBadge: {
-    backgroundColor: '#fef2f2',
+    backgroundColor: COLORS.coralLight,
     paddingHorizontal: SPACING.sm,
     paddingVertical: 2,
     borderRadius: BORDER_RADIUS.sm,

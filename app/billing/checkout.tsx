@@ -349,7 +349,7 @@ const createStyles = (COLORS: Palette) =>
     flexDirection: 'row',
     alignItems: 'center',
     gap: SPACING.sm,
-    backgroundColor: '#ecfdf5',
+    backgroundColor: COLORS.mintLight,
     padding: SPACING.md,
     borderRadius: BORDER_RADIUS.md,
     marginTop: SPACING.sm,

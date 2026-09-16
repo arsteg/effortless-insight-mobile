@@ -88,7 +88,7 @@ const createStyles = (COLORS: Palette) =>
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    borderRadius: BORDER_RADIUS.md,
+    borderRadius: BORDER_RADIUS.lg,
     gap: SPACING.sm,
   },
   fullWidth: {
@@ -101,6 +101,12 @@ const createStyles = (COLORS: Palette) =>
   // Variants
   primary: {
     backgroundColor: COLORS.primary,
+    // Prominent-but-calm: a soft brand-tinted lift, not a hard shadow.
+    shadowColor: COLORS.primary,
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.28,
+    shadowRadius: 12,
+    elevation: 4,
   },
   secondary: {
     backgroundColor: COLORS.gray[100],
@@ -136,7 +142,7 @@ const createStyles = (COLORS: Palette) =>
 
   // Text
   text: {
-    fontWeight: '600',
+    fontWeight: '700',
   },
   primaryText: {
     color: COLORS.white,

@@ -507,7 +507,7 @@ const createStyles = (COLORS: Palette) =>
     opacity: 0.5,
   },
   actionButtonDanger: {
-    backgroundColor: '#fef2f2',
+    backgroundColor: COLORS.coralLight,
   },
   actionButtonContent: {
     marginLeft: SPACING.md,
@@ -525,12 +525,12 @@ const createStyles = (COLORS: Palette) =>
   },
   errorBanner: {
     flexDirection: 'row',
-    backgroundColor: '#fef2f2',
+    backgroundColor: COLORS.coralLight,
     margin: SPACING.md,
     padding: SPACING.md,
     borderRadius: BORDER_RADIUS.lg,
     borderWidth: 1,
-    borderColor: '#fecaca',
+    borderColor: COLORS.coral,
   },
   errorContent: {
     flex: 1,

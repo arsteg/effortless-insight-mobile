@@ -321,13 +321,13 @@ const createStyles = (COLORS: Palette) =>
     marginBottom: SPACING.lg,
   },
   successIcon: {
-    backgroundColor: '#dcfce7',
+    backgroundColor: COLORS.mintLight,
   },
   errorIcon: {
-    backgroundColor: '#fef2f2',
+    backgroundColor: COLORS.coralLight,
   },
   warningIcon: {
-    backgroundColor: '#fef3c7',
+    backgroundColor: COLORS.amberLight,
   },
   title: {
     fontSize: FONT_SIZES.xl,

@@ -59,14 +59,14 @@ const createStyles = (COLORS: Palette) =>
     marginTop: SPACING.sm,
   },
   badgeStale: {
-    backgroundColor: '#fef3c7',
+    backgroundColor: COLORS.amberLight,
   },
   text: {
     fontSize: FONT_SIZES.sm,
     color: COLORS.gray[600],
   },
   textStale: {
-    color: '#92400e',
+    color: COLORS.amber,
     fontWeight: '500',
   },
 });

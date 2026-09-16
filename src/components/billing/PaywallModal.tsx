@@ -159,7 +159,7 @@ const createStyles = (COLORS: Palette) =>
     width: 64,
     height: 64,
     borderRadius: 32,
-    backgroundColor: '#fef3c7',
+    backgroundColor: COLORS.amberLight,
     justifyContent: 'center',
     alignItems: 'center',
     marginBottom: SPACING.lg,

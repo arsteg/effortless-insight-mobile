@@ -397,9 +397,10 @@ const createStyles = (COLORS: Palette) =>
   },
   title: {
     fontSize: FONT_SIZES.xxxl,
-    fontWeight: 'bold',
+    fontWeight: '800',
     color: COLORS.primary,
     marginBottom: SPACING.sm,
+    letterSpacing: -0.5,
   },
   subtitle: {
     fontSize: FONT_SIZES.md,
@@ -407,10 +408,10 @@ const createStyles = (COLORS: Palette) =>
     textAlign: 'center',
   },
   errorContainer: {
-    backgroundColor: '#fef2f2',
+    backgroundColor: COLORS.coralLight,
     borderWidth: 1,
-    borderColor: '#fecaca',
-    borderRadius: BORDER_RADIUS.md,
+    borderColor: COLORS.coral,
+    borderRadius: BORDER_RADIUS.lg,
     padding: SPACING.md,
     marginBottom: SPACING.md,
   },

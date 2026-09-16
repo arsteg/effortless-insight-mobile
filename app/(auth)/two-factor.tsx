@@ -320,9 +320,9 @@ const createStyles = (COLORS: Palette) =>
     lineHeight: 22,
   },
   errorContainer: {
-    backgroundColor: '#fef2f2',
+    backgroundColor: COLORS.coralLight,
     borderWidth: 1,
-    borderColor: '#fecaca',
+    borderColor: COLORS.coral,
     borderRadius: BORDER_RADIUS.md,
     padding: SPACING.md,
     marginBottom: SPACING.md,

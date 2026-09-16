@@ -406,7 +406,7 @@ const createStyles = (COLORS: Palette) =>
     alignItems: 'flex-start',
     marginTop: SPACING.md,
     padding: SPACING.sm,
-    backgroundColor: '#fef2f2',
+    backgroundColor: COLORS.coralLight,
     borderRadius: BORDER_RADIUS.md,
   },
   errorText: {

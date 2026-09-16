@@ -101,7 +101,7 @@ const createStyles = (COLORS: Palette) =>
     width: 80,
     height: 80,
     borderRadius: BORDER_RADIUS.full,
-    backgroundColor: '#fef2f2',
+    backgroundColor: COLORS.coralLight,
     justifyContent: 'center',
     alignItems: 'center',
     marginBottom: SPACING.lg,

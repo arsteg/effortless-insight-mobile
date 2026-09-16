@@ -792,7 +792,7 @@ const createStyles = (COLORS: Palette) =>
     marginHorizontal: SPACING.md,
     marginTop: SPACING.sm,
     borderRadius: BORDER_RADIUS.md,
-    backgroundColor: '#fef2f2',
+    backgroundColor: COLORS.coralLight,
   },
   clearCacheText: {
     fontSize: FONT_SIZES.sm,

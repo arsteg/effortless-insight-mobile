@@ -126,7 +126,7 @@ export default function DashboardScreen() {
           style={styles.alertBanner}
           onPress={() => router.push('/notices?filter=overdue')}
         >
-          <AlertCircle color="#dc2626" size={20} />
+          <AlertCircle color={COLORS.coral} size={20} />
           <Text style={styles.alertText}>
             {t(
               stats.overdueCount === 1
@@ -135,7 +135,7 @@ export default function DashboardScreen() {
               { count: stats.overdueCount }
             )}
           </Text>
-          <ChevronRight color="#dc2626" size={20} />
+          <ChevronRight color={COLORS.coral} size={20} />
         </TouchableOpacity>
       )}
 
@@ -146,20 +146,23 @@ export default function DashboardScreen() {
           value={activeCount}
           icon={<FileText size={20} color={COLORS.primary} />}
           color={COLORS.primary}
+          tint={COLORS.primaryLight}
           onPress={() => router.push('/notices')}
         />
         <StatCard
           label={t('dashboard.dueSoon')}
           value={stats.dueThisWeek}
-          icon={<Clock size={20} color={COLORS.warning} />}
-          color={COLORS.warning}
+          icon={<Clock size={20} color={COLORS.amber} />}
+          color={COLORS.amber}
+          tint={COLORS.amberLight}
           onPress={() => router.push('/notices?filter=due-soon')}
         />
         <StatCard
           label={t('dashboard.overdue')}
           value={stats.overdueCount}
-          icon={<AlertCircle size={20} color={COLORS.error} />}
-          color={COLORS.error}
+          icon={<AlertCircle size={20} color={COLORS.coral} />}
+          color={COLORS.coral}
+          tint={COLORS.coralLight}
           onPress={() => router.push('/notices?filter=overdue')}
         />
       </View>
@@ -271,18 +274,20 @@ function StatCard({
   value,
   icon,
   color,
+  tint,
   onPress,
 }: {
   label: string;
   value: number;
   icon: React.ReactNode;
   color: string;
+  tint?: string;
   onPress: () => void;
 }) {
   const styles = useThemedStyles(createStyles);
   return (
-    <TouchableOpacity style={styles.statCard} onPress={onPress}>
-      <View style={styles.statIcon}>{icon}</View>
+    <TouchableOpacity style={styles.statCard} onPress={onPress} activeOpacity={0.85}>
+      <View style={[styles.statIcon, tint ? { backgroundColor: tint } : null]}>{icon}</View>
       <Text style={[styles.statValue, { color }]}>{value}</Text>
       <Text style={styles.statLabel}>{label}</Text>
     </TouchableOpacity>
@@ -300,26 +305,38 @@ function NoticeCard({
   const styles = useThemedStyles(createStyles);
   const COLORS = useColors();
   const getRiskColor = (risk?: string) => {
-    if (!risk) return COLORS.gray[400];
-    return RISK_COLORS[risk as keyof typeof RISK_COLORS] || COLORS.gray[400];
+    if (!risk) return COLORS.gray[300];
+    return RISK_COLORS[risk as keyof typeof RISK_COLORS] || COLORS.gray[300];
   };
 
+  // Deadline tone: overdue = coral, ≤3 days = amber, else comfortable mint.
+  const days = notice.daysRemaining;
+  const deadlineTone =
+    days === undefined
+      ? { fg: COLORS.gray[500], bg: COLORS.gray[100] }
+      : days < 0
+        ? { fg: COLORS.coral, bg: COLORS.coralLight }
+        : days <= 3
+          ? { fg: COLORS.amber, bg: COLORS.amberLight }
+          : { fg: COLORS.mint, bg: COLORS.mintLight };
+
   return (
-    <TouchableOpacity style={styles.noticeCard} onPress={onPress}>
+    <TouchableOpacity style={styles.noticeCard} onPress={onPress} activeOpacity={0.85}>
+      <View style={[styles.noticeRail, { backgroundColor: getRiskColor(notice.riskLevel) }]} />
       <View style={styles.noticeIcon}>
-        <FileText color={COLORS.gray[500]} size={24} />
+        <FileText color={COLORS.primary} size={22} />
       </View>
       <View style={styles.noticeInfo}>
-        <Text style={styles.noticeType}>{notice.noticeType || 'Notice'}</Text>
+        <Text style={styles.noticeType} numberOfLines={1}>{notice.noticeType || 'Notice'}</Text>
         <Text style={styles.noticeAmount}>
           {notice.taxAmount ? `₹${(notice.taxAmount / 100000).toFixed(1)}L` : '-'}
         </Text>
       </View>
       <View style={styles.noticeDeadline}>
-        <View style={[styles.riskBadge, { backgroundColor: getRiskColor(notice.riskLevel) }]}>
-          <Clock color={COLORS.white} size={12} />
-          <Text style={styles.riskBadgeText}>
-            {notice.daysRemaining !== undefined ? `${notice.daysRemaining} days` : '-'}
+        <View style={[styles.deadlineChip, { backgroundColor: deadlineTone.bg }]}>
+          <Clock color={deadlineTone.fg} size={12} />
+          <Text style={[styles.deadlineChipText, { color: deadlineTone.fg }]}>
+            {days === undefined ? '-' : days < 0 ? `${Math.abs(days)}d overdue` : `${days}d left`}
           </Text>
         </View>
       </View>
@@ -424,35 +441,38 @@ const createStyles = (COLORS: Palette) =>
     backgroundColor: COLORS.gray[50],
   },
   greeting: {
-    padding: SPACING.lg,
-    backgroundColor: COLORS.primary,
+    paddingHorizontal: SPACING.lg,
+    paddingTop: SPACING.lg,
+    paddingBottom: SPACING.sm,
+    backgroundColor: COLORS.gray[50],
   },
   greetingText: {
-    fontSize: FONT_SIZES.xxl,
-    fontWeight: 'bold',
-    color: COLORS.white,
+    fontSize: FONT_SIZES.xxxl,
+    fontWeight: '800',
+    color: COLORS.gray[900],
+    letterSpacing: -0.5,
   },
   greetingSubtext: {
     fontSize: FONT_SIZES.md,
-    color: COLORS.primaryLight,
+    color: COLORS.gray[500],
     marginTop: 4,
   },
   alertBanner: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#fef2f2',
+    backgroundColor: COLORS.coralLight,
     padding: SPACING.md,
     marginHorizontal: SPACING.md,
     marginTop: SPACING.md,
-    borderRadius: BORDER_RADIUS.md,
+    borderRadius: BORDER_RADIUS.lg,
     borderWidth: 1,
-    borderColor: '#fecaca',
+    borderColor: COLORS.coral,
   },
   alertText: {
     flex: 1,
     marginLeft: SPACING.sm,
-    color: '#dc2626',
-    fontWeight: '500',
+    color: COLORS.coral,
+    fontWeight: '600',
     fontSize: FONT_SIZES.sm,
   },
   statsGrid: {
@@ -463,26 +483,37 @@ const createStyles = (COLORS: Palette) =>
   statCard: {
     flex: 1,
     backgroundColor: COLORS.white,
-    padding: SPACING.md,
-    borderRadius: BORDER_RADIUS.lg,
+    paddingVertical: SPACING.md,
+    paddingHorizontal: SPACING.sm,
+    borderRadius: BORDER_RADIUS.xl,
     alignItems: 'center',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.05,
-    shadowRadius: 2,
+    borderWidth: 1,
+    borderColor: COLORS.gray[200],
+    shadowColor: COLORS.black,
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.06,
+    shadowRadius: 12,
     elevation: 2,
   },
   statIcon: {
-    marginBottom: SPACING.xs,
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: COLORS.gray[100],
+    marginBottom: SPACING.sm,
   },
   statValue: {
     fontSize: FONT_SIZES.xxl,
-    fontWeight: 'bold',
+    fontWeight: '800',
+    fontVariant: ['tabular-nums'],
   },
   statLabel: {
     fontSize: FONT_SIZES.sm,
     color: COLORS.gray[500],
     marginTop: 2,
+    textAlign: 'center',
   },
   section: {
     padding: SPACING.md,
@@ -504,9 +535,9 @@ const createStyles = (COLORS: Palette) =>
     fontWeight: '500',
   },
   emptySection: {
-    backgroundColor: COLORS.white,
+    backgroundColor: COLORS.mintLight,
     padding: SPACING.lg,
-    borderRadius: BORDER_RADIUS.lg,
+    borderRadius: BORDER_RADIUS.xl,
     alignItems: 'center',
     gap: SPACING.sm,
   },
@@ -518,20 +549,32 @@ const createStyles = (COLORS: Palette) =>
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: COLORS.white,
-    padding: SPACING.md,
-    borderRadius: BORDER_RADIUS.lg,
+    paddingVertical: SPACING.md,
+    paddingRight: SPACING.md,
+    paddingLeft: SPACING.md + 6,
+    borderRadius: BORDER_RADIUS.xl,
     marginBottom: SPACING.sm,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.05,
-    shadowRadius: 2,
+    borderWidth: 1,
+    borderColor: COLORS.gray[200],
+    overflow: 'hidden',
+    shadowColor: COLORS.black,
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.06,
+    shadowRadius: 12,
     elevation: 2,
   },
+  noticeRail: {
+    position: 'absolute',
+    left: 0,
+    top: 0,
+    bottom: 0,
+    width: 5,
+  },
   noticeIcon: {
-    width: 48,
-    height: 48,
-    borderRadius: BORDER_RADIUS.md,
-    backgroundColor: COLORS.gray[100],
+    width: 44,
+    height: 44,
+    borderRadius: BORDER_RADIUS.lg,
+    backgroundColor: COLORS.primaryLight,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -552,30 +595,32 @@ const createStyles = (COLORS: Palette) =>
   noticeDeadline: {
     alignItems: 'flex-end',
   },
-  riskBadge: {
+  deadlineChip: {
     flexDirection: 'row',
     alignItems: 'center',
     paddingHorizontal: SPACING.sm,
-    paddingVertical: 4,
+    paddingVertical: 5,
     borderRadius: BORDER_RADIUS.full,
     gap: 4,
   },
-  riskBadgeText: {
+  deadlineChipText: {
     fontSize: FONT_SIZES.xs,
-    fontWeight: '500',
-    color: COLORS.white,
+    fontWeight: '700',
+    fontVariant: ['tabular-nums'],
   },
   taskCard: {
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: COLORS.white,
     padding: SPACING.md,
-    borderRadius: BORDER_RADIUS.lg,
+    borderRadius: BORDER_RADIUS.xl,
     marginBottom: SPACING.sm,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.05,
-    shadowRadius: 2,
+    borderWidth: 1,
+    borderColor: COLORS.gray[200],
+    shadowColor: COLORS.black,
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.06,
+    shadowRadius: 12,
     elevation: 2,
   },
   taskPriority: {
@@ -598,15 +643,15 @@ const createStyles = (COLORS: Palette) =>
     marginTop: 2,
   },
   overdueTag: {
-    backgroundColor: '#fef2f2',
+    backgroundColor: COLORS.coralLight,
     paddingHorizontal: SPACING.sm,
-    paddingVertical: 2,
-    borderRadius: BORDER_RADIUS.sm,
+    paddingVertical: 3,
+    borderRadius: BORDER_RADIUS.full,
   },
   overdueText: {
     fontSize: FONT_SIZES.xs,
-    color: COLORS.error,
-    fontWeight: '500',
+    color: COLORS.coral,
+    fontWeight: '700',
   },
   quickActions: {
     flexDirection: 'row',
@@ -616,29 +661,34 @@ const createStyles = (COLORS: Palette) =>
     flex: 1,
     backgroundColor: COLORS.white,
     padding: SPACING.md,
-    borderRadius: BORDER_RADIUS.lg,
+    borderRadius: BORDER_RADIUS.xl,
     alignItems: 'center',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.05,
-    shadowRadius: 2,
+    borderWidth: 1,
+    borderColor: COLORS.gray[200],
+    shadowColor: COLORS.black,
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.06,
+    shadowRadius: 12,
     elevation: 2,
     gap: SPACING.sm,
   },
   quickActionLabel: {
     fontSize: FONT_SIZES.sm,
     color: COLORS.gray[700],
-    fontWeight: '500',
+    fontWeight: '600',
+    textAlign: 'center',
   },
   usageCard: {
     backgroundColor: COLORS.white,
-    borderRadius: BORDER_RADIUS.lg,
+    borderRadius: BORDER_RADIUS.xl,
     padding: SPACING.md,
     gap: SPACING.md,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.05,
-    shadowRadius: 2,
+    borderWidth: 1,
+    borderColor: COLORS.gray[200],
+    shadowColor: COLORS.black,
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.06,
+    shadowRadius: 12,
     elevation: 2,
   },
   usageItem: {

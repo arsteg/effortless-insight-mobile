@@ -281,20 +281,38 @@ function NoticeCard({
   const sourceConfig = getSourceConfig(notice.source);
   const SourceIcon = sourceConfig.icon;
 
+  const statusColor = getStatusColor(notice.status);
+  const riskColor = getRiskColor(notice.riskLevel);
+
+  // Deadline tone: overdue = coral, due today/≤3 = amber, else comfortable mint.
+  const days = notice.daysRemaining;
+  const deadlineTone =
+    days === undefined
+      ? { fg: COLORS.gray[500], bg: COLORS.gray[100] }
+      : days < 0
+        ? { fg: COLORS.coral, bg: COLORS.coralLight }
+        : days <= 3
+          ? { fg: COLORS.amber, bg: COLORS.amberLight }
+          : { fg: COLORS.mint, bg: COLORS.mintLight };
+
   return (
-    <TouchableOpacity style={styles.noticeCard} onPress={onPress}>
+    <TouchableOpacity style={styles.noticeCard} onPress={onPress} activeOpacity={0.85}>
+      {/* Risk-keyed left rail — the notice design language */}
+      <View style={[styles.noticeRail, { backgroundColor: riskColor }]} />
       <View style={styles.noticeHeader}>
         <View style={styles.noticeTypeContainer}>
-          <FileText size={20} color={COLORS.gray[500]} />
-          <Text style={styles.noticeType}>{notice.noticeType || 'Notice'}</Text>
+          <View style={styles.noticeTypeIcon}>
+            <FileText size={18} color={COLORS.primary} />
+          </View>
+          <Text style={styles.noticeType} numberOfLines={1}>{notice.noticeType || 'Notice'}</Text>
           {notice.source === 'gstn_portal' && (
             <View style={styles.sourceBadge}>
               <SourceIcon size={12} color={sourceConfig.color} />
             </View>
           )}
         </View>
-        <View style={[styles.statusBadge, { backgroundColor: getStatusColor(notice.status) }]}>
-          <Text style={styles.statusText}>
+        <View style={[styles.statusBadge, { backgroundColor: `${statusColor}1A` }]}>
+          <Text style={[styles.statusText, { color: statusColor }]}>
             {notice.status.replace('_', ' ').replace(/^\w/, (c) => c.toUpperCase())}
           </Text>
         </View>
@@ -308,24 +326,25 @@ function NoticeCard({
       </View>
 
       <View style={styles.noticeFooter}>
-        {/* Deadline */}
-        <View style={styles.deadlineContainer}>
-          <Clock size={14} color={COLORS.gray[500]} />
-          <Text style={styles.deadlineText}>
-            {notice.daysRemaining !== undefined
-              ? notice.daysRemaining < 0
-                ? `${Math.abs(notice.daysRemaining)} days overdue`
-                : notice.daysRemaining === 0
+        {/* Deadline chip */}
+        <View style={[styles.deadlineChip, { backgroundColor: deadlineTone.bg }]}>
+          <Clock size={13} color={deadlineTone.fg} />
+          <Text style={[styles.deadlineText, { color: deadlineTone.fg }]}>
+            {days !== undefined
+              ? days < 0
+                ? `${Math.abs(days)}d overdue`
+                : days === 0
                 ? 'Due today'
-                : `${notice.daysRemaining} days left`
+                : `${days}d left`
               : 'No deadline'}
           </Text>
         </View>
 
-        {/* Risk Level */}
+        {/* Risk pill */}
         {notice.riskLevel && (
-          <View style={[styles.riskBadge, { backgroundColor: getRiskColor(notice.riskLevel) }]}>
-            <Text style={styles.riskText}>
+          <View style={[styles.riskBadge, { backgroundColor: `${riskColor}1A` }]}>
+            <View style={[styles.riskDot, { backgroundColor: riskColor }]} />
+            <Text style={[styles.riskText, { color: riskColor }]}>
               {notice.riskLevel.charAt(0).toUpperCase() + notice.riskLevel.slice(1)}
             </Text>
           </View>
@@ -335,7 +354,7 @@ function NoticeCard({
       {/* Overdue Warning */}
       {notice.daysRemaining !== undefined && notice.daysRemaining < 0 && (
         <View style={styles.overdueWarning}>
-          <AlertCircle size={14} color={COLORS.error} />
+          <AlertCircle size={14} color={COLORS.coral} />
           <Text style={styles.overdueText}>{t('notices.immediateAttention')}</Text>
         </View>
       )}
@@ -431,13 +450,25 @@ const createStyles = (COLORS: Palette) =>
     backgroundColor: COLORS.white,
     marginHorizontal: SPACING.md,
     marginBottom: SPACING.sm,
-    borderRadius: BORDER_RADIUS.lg,
-    padding: SPACING.md,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.05,
-    shadowRadius: 2,
+    borderRadius: BORDER_RADIUS.xl,
+    paddingVertical: SPACING.md,
+    paddingRight: SPACING.md,
+    paddingLeft: SPACING.md + 6,
+    borderWidth: 1,
+    borderColor: COLORS.gray[200],
+    overflow: 'hidden',
+    shadowColor: COLORS.black,
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.06,
+    shadowRadius: 12,
     elevation: 2,
+  },
+  noticeRail: {
+    position: 'absolute',
+    left: 0,
+    top: 0,
+    bottom: 0,
+    width: 5,
   },
   noticeHeader: {
     flexDirection: 'row',
@@ -449,11 +480,22 @@ const createStyles = (COLORS: Palette) =>
     flexDirection: 'row',
     alignItems: 'center',
     gap: SPACING.sm,
+    flex: 1,
+    marginRight: SPACING.sm,
+  },
+  noticeTypeIcon: {
+    width: 32,
+    height: 32,
+    borderRadius: BORDER_RADIUS.md,
+    backgroundColor: COLORS.primaryLight,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   noticeType: {
     fontSize: FONT_SIZES.md,
-    fontWeight: '600',
+    fontWeight: '700',
     color: COLORS.gray[900],
+    flexShrink: 1,
   },
   sourceBadge: {
     marginLeft: SPACING.xs,
@@ -463,13 +505,12 @@ const createStyles = (COLORS: Palette) =>
   },
   statusBadge: {
     paddingHorizontal: SPACING.sm,
-    paddingVertical: 2,
-    borderRadius: BORDER_RADIUS.sm,
+    paddingVertical: 3,
+    borderRadius: BORDER_RADIUS.full,
   },
   statusText: {
     fontSize: FONT_SIZES.xs,
-    fontWeight: '500',
-    color: COLORS.white,
+    fontWeight: '700',
   },
   noticeBody: {
     flexDirection: 'row',
@@ -483,32 +524,44 @@ const createStyles = (COLORS: Palette) =>
   },
   noticeAmount: {
     fontSize: FONT_SIZES.lg,
-    fontWeight: '600',
+    fontWeight: '800',
     color: COLORS.gray[900],
+    fontVariant: ['tabular-nums'],
   },
   noticeFooter: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
   },
-  deadlineContainer: {
+  deadlineChip: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 4,
+    gap: 5,
+    paddingHorizontal: SPACING.sm,
+    paddingVertical: 4,
+    borderRadius: BORDER_RADIUS.full,
   },
   deadlineText: {
     fontSize: FONT_SIZES.sm,
-    color: COLORS.gray[500],
+    fontWeight: '700',
+    fontVariant: ['tabular-nums'],
   },
   riskBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
     paddingHorizontal: SPACING.sm,
-    paddingVertical: 2,
-    borderRadius: BORDER_RADIUS.sm,
+    paddingVertical: 4,
+    borderRadius: BORDER_RADIUS.full,
+  },
+  riskDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
   },
   riskText: {
     fontSize: FONT_SIZES.xs,
-    fontWeight: '500',
-    color: COLORS.white,
+    fontWeight: '700',
   },
   overdueWarning: {
     flexDirection: 'row',
@@ -521,8 +574,8 @@ const createStyles = (COLORS: Palette) =>
   },
   overdueText: {
     fontSize: FONT_SIZES.sm,
-    color: COLORS.error,
-    fontWeight: '500',
+    color: COLORS.coral,
+    fontWeight: '600',
   },
   footer: {
     padding: SPACING.lg,

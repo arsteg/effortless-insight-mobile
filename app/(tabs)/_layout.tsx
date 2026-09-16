@@ -42,7 +42,7 @@ function CalendarHeaderButton() {
       accessibilityLabel="Open deadline calendar"
       hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
     >
-      <CalendarDays color={COLORS.white} size={22} />
+      <CalendarDays color={COLORS.primary} size={22} />
     </TouchableOpacity>
   );
 }
@@ -59,20 +59,25 @@ export default function TabLayout() {
           backgroundColor: COLORS.white,
           borderTopWidth: 1,
           borderTopColor: COLORS.gray[200],
-          paddingBottom: 5,
-          paddingTop: 5,
-          height: 60,
+          paddingBottom: 6,
+          paddingTop: 6,
+          height: 62,
         },
         tabBarLabelStyle: {
           fontSize: 12,
-          fontWeight: '500',
+          fontWeight: '600',
         },
         headerStyle: {
-          backgroundColor: COLORS.primary,
+          backgroundColor: COLORS.white,
+          borderBottomWidth: 1,
+          borderBottomColor: COLORS.gray[200],
         },
-        headerTintColor: COLORS.white,
+        headerShadowVisible: false,
+        headerTintColor: COLORS.gray[900],
         headerTitleStyle: {
-          fontWeight: 'bold',
+          fontWeight: '800',
+          color: COLORS.gray[900],
+          letterSpacing: -0.3,
         },
       }}
     >

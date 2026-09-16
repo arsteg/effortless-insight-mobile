@@ -65,9 +65,9 @@ const TYPE_ICONS: Record<string, React.ComponentType<{ color: string; size: numb
 
 // Priority colours, built from the active palette rather than captured once.
 const priorityColors = (COLORS: Palette) => ({
-  critical: COLORS.error,
-  high: '#f97316',
-  medium: COLORS.warning,
+  critical: COLORS.risk.critical,
+  high: COLORS.risk.high,
+  medium: COLORS.risk.medium,
   low: COLORS.gray[400],
 });
 

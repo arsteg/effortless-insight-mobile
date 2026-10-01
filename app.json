@@ -2,7 +2,7 @@
   "expo": {
     "name": "EffortlessInsight",
     "slug": "effortlessinsight",
-    "version": "1.0.1",
+    "version": "1.0.5",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "scheme": "effortlessinsight",
@@ -30,7 +30,7 @@
         "backgroundColor": "#0ea5e9"
       },
       "package": "com.arsteg.effortlessinsightapp",
-      "versionCode": 2,
+      "versionCode": 6,
       "googleServicesFile": "./google-services.json",
       "permissions": [
         "android.permission.CAMERA",
@@ -83,6 +83,7 @@
         }
       ],
       "./plugins/withRNFirebaseDisableSPM",
+      "./plugins/withoutUnusedAndroidPermissions",
       [
         "expo-quick-actions",
         {

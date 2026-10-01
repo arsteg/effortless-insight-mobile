@@ -59,6 +59,18 @@ export const billingApi = {
    * Get current subscription with usage
    * Returns null values if no subscription exists (404) or no org selected
    */
+  /**
+   * Feature codes available to the current organization. Reflects plan
+   * features plus bypasses (CA-operator plan, free CA access grants), so it
+   * is the authoritative client-side gate for paid features.
+   */
+  getAvailableFeatures: async (): Promise<string[]> => {
+    const response = await apiClient.get<ApiResponse<{ features: string[] }>>(
+      '/subscriptions/features'
+    );
+    return response.data.data.features;
+  },
+
   getCurrentSubscription: async (): Promise<CurrentSubscriptionResponse> => {
     try {
       const response = await apiClient.get<ApiResponse<CurrentSubscriptionResponse>>('/subscriptions/current');

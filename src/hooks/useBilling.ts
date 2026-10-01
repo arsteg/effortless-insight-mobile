@@ -44,6 +44,7 @@ export const billingKeys = {
   subscription: () => [...billingKeys.all, 'subscription'] as const,
   usage: () => [...billingKeys.all, 'usage'] as const,
   usageCheck: (action: PaywallAction) => [...billingKeys.all, 'usageCheck', action] as const,
+  features: () => [...billingKeys.all, 'features'] as const,
   invoices: () => [...billingKeys.all, 'invoices'] as const,
   invoiceList: (page: number, limit: number) => [...billingKeys.invoices(), 'list', page, limit] as const,
   invoiceDetail: (id: string) => [...billingKeys.invoices(), 'detail', id] as const,
@@ -68,6 +69,27 @@ export function usePlans() {
 /**
  * Fetch current subscription with usage
  */
+/**
+ * Feature codes available to the current organization (plan + grants).
+ */
+export function useAvailableFeatures() {
+  return useQuery({
+    queryKey: billingKeys.features(),
+    queryFn: billingApi.getAvailableFeatures,
+    staleTime: 1000 * 60 * 5, // 5 minutes
+  });
+}
+
+/**
+ * Whether the current organization has a paid feature. Returns false while
+ * loading (features appear once known) — used to hide paid UI like the
+ * AI assistant on the free plan. The backend enforces the same gate.
+ */
+export function useHasFeature(featureCode: string): boolean {
+  const { data: features } = useAvailableFeatures();
+  return features?.includes(featureCode) ?? false;
+}
+
 export function useCurrentSubscription() {
   return useQuery({
     queryKey: billingKeys.subscription(),

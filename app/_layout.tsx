@@ -6,7 +6,8 @@
 import { useEffect, useRef, useState, useCallback } from 'react';
 import { Stack, useRouter, useSegments } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
-import { View, Platform, AppState, BackHandler } from 'react-native';
+import { View, Platform, AppState, BackHandler, TouchableOpacity } from 'react-native';
+import { Bot } from 'lucide-react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { QueryClient, QueryClientProvider, focusManager } from '@tanstack/react-query';
 import * as SplashScreen from 'expo-splash-screen';
@@ -35,9 +36,36 @@ import { shouldExitOnBack, EXIT_WINDOW_MS, EXIT_HINT_KEY } from '../src/utils/ba
 import { useTranslation } from '../src/hooks';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { notificationKeys } from '../src/hooks/useNotifications';
+import { useHasFeature } from '../src/hooks/useBilling';
 
 // Prevent splash screen from auto-hiding
 SplashScreen.preventAutoHideAsync();
+
+/** Header button on notice detail: opens the assistant scoped to that notice. */
+function NoticeAssistantButton({ noticeId }: { noticeId?: string }) {
+  const router = useRouter();
+  // Hidden on plans without AI features (backend enforces the same gate).
+  const hasAiFeatures = useHasFeature('ai_explanation');
+
+  if (!hasAiFeatures) return null;
+
+  return (
+    <TouchableOpacity
+      onPress={() =>
+        router.push({
+          pathname: '/assistant',
+          params: noticeId ? { noticeId, route: `/notices/${noticeId}` } : {},
+        })
+      }
+      accessibilityRole="button"
+      accessibilityLabel="Ask the assistant about this notice"
+      hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+      style={{ paddingHorizontal: 4 }}
+    >
+      <Bot color="#ffffff" size={22} />
+    </TouchableOpacity>
+  );
+}
 
 /**
  * Tell React Query when the app is actually in front of the user.
@@ -405,8 +433,22 @@ function RootLayoutNav() {
         <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
         <Stack.Screen
           name="notices/[id]"
-          options={{
+          options={({ route }) => ({
             title: 'Notice Details',
+            presentation: 'card',
+            // Opens the assistant with this notice as context ("help me reply
+            // to this notice"). White icon to match the header tint.
+            headerRight: () => (
+              <NoticeAssistantButton
+                noticeId={(route.params as { id?: string } | undefined)?.id}
+              />
+            ),
+          })}
+        />
+        <Stack.Screen
+          name="assistant"
+          options={{
+            title: 'EI Assistant',
             presentation: 'card',
           }}
         />

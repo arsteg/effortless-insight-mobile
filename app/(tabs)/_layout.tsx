@@ -4,9 +4,10 @@
 
 import { Tabs, useRouter } from 'expo-router';
 import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
-import { Home, FileText, Camera, CheckSquare, Bell, User, CalendarDays } from 'lucide-react-native';
+import { Home, FileText, Camera, CheckSquare, Bell, User, CalendarDays, Bot } from 'lucide-react-native';
 import { SPACING, FONT_SIZES, BORDER_RADIUS } from '../../src/utils/constants';
 import { useUnreadCount } from '../../src/hooks/useNotifications';
+import { useHasFeature } from '../../src/hooks/useBilling';
 import { useColors, useThemedStyles } from '../../src/theme/useTheme';
 import type { Palette } from '../../src/theme/palettes';
 
@@ -26,6 +27,30 @@ function NotificationTabIcon({ color, size }: { color: string; size: number }) {
         </View>
       )}
     </View>
+  );
+}
+
+function AssistantHeaderButton() {
+  const styles = useThemedStyles(createStyles);
+  const COLORS = useColors();
+  const router = useRouter();
+  // AI turns cost money — hidden on plans without AI features (backend
+  // enforces the same gate server-side).
+  const hasAiFeatures = useHasFeature('ai_explanation');
+
+  if (!hasAiFeatures) return null;
+
+  return (
+    <TouchableOpacity
+      onPress={() => router.push('/assistant')}
+      style={styles.headerButton}
+      accessibilityRole="button"
+      accessibilityLabel="Open EI Assistant"
+      hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+      testID="assistant-launcher"
+    >
+      <Bot color={COLORS.lavender} size={22} />
+    </TouchableOpacity>
   );
 }
 
@@ -87,6 +112,7 @@ export default function TabLayout() {
           title: 'Home',
           tabBarIcon: ({ color, size }) => <Home color={color} size={size} />,
           headerTitle: 'EffortlessInsight',
+          headerRight: () => <AssistantHeaderButton />,
         }}
       />
       <Tabs.Screen

@@ -2,10 +2,17 @@
  * Billing Stack Layout
  */
 
-import { Stack } from 'expo-router';
+import { Redirect, Stack } from 'expo-router';
 import { COLORS } from '../../src/utils/constants';
+import { canPurchaseInApp } from '../../src/utils/inAppPurchases';
 
 export default function BillingLayout() {
+  // The entry points are hidden on iOS; this also catches deep links and
+  // notification taps that would otherwise land on plans or checkout.
+  if (!canPurchaseInApp) {
+    return <Redirect href="/" />;
+  }
+
   return (
     <Stack
       screenOptions={{

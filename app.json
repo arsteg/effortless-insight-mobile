@@ -2,7 +2,7 @@
   "expo": {
     "name": "EffortlessInsight",
     "slug": "effortlessinsight",
-    "version": "1.0.5",
+    "version": "1.0.6",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "scheme": "effortlessinsight",
@@ -11,14 +11,16 @@
       "**/*"
     ],
     "ios": {
-      "supportsTablet": true,
+      "supportsTablet": false,
       "bundleIdentifier": "com.arsteg.effortlessinsightapp",
       "buildNumber": "1",
       "googleServicesFile": "./GoogleService-Info.plist",
       "infoPlist": {
-        "NSCameraUsageDescription": "EffortlessInsight needs camera access to scan GST notices",
-        "NSPhotoLibraryUsageDescription": "EffortlessInsight needs photo library access to upload notice images",
-        "NSFaceIDUsageDescription": "EffortlessInsight uses Face ID to securely unlock your account",
+        "NSCameraUsageDescription": "EffortlessInsight uses the camera to scan GST notices and to take your profile photo.",
+        "NSPhotoLibraryUsageDescription": "EffortlessInsight uses your photo library so you can upload GST notice images and choose a profile photo.",
+        "NSMicrophoneUsageDescription": "EffortlessInsight uses the microphone so you can ask the EI Assistant questions by voice. Your recording is sent securely to be converted into text.",
+        "NSFaceIDUsageDescription": "EffortlessInsight uses Face ID to securely unlock your account.",
+        "ITSAppUsesNonExemptEncryption": false,
         "UIBackgroundModes": [
           "remote-notification"
         ]
@@ -95,7 +97,13 @@
           }
         }
       ],
-      "expo-sharing"
+      "expo-sharing",
+      [
+        "expo-sensors",
+        {
+          "motionPermission": false
+        }
+      ]
     ],
     "experiments": {
       "typedRoutes": true

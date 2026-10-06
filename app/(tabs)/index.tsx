@@ -20,6 +20,7 @@ import { useCurrentSubscription } from '../../src/hooks/useBilling';
 import { useAuthStore } from '../../src/stores';
 import { LoadingSpinner, EmptyState } from '../../src/components/common';
 import { SPACING, FONT_SIZES, BORDER_RADIUS, RISK_COLORS } from '../../src/utils/constants';
+import { canPurchaseInApp } from '../../src/utils/inAppPurchases';
 import { format, differenceInDays } from 'date-fns';
 import { useColors, useThemedStyles } from '../../src/theme/useTheme';
 import type { Palette } from '../../src/theme/palettes';
@@ -214,9 +215,11 @@ export default function DashboardScreen() {
         <View style={styles.section}>
           <View style={styles.sectionHeader}>
             <Text style={styles.sectionTitle}>{t('dashboard.usage')}</Text>
-            <TouchableOpacity onPress={() => router.push('/billing')}>
-              <Text style={styles.sectionLink}>{t('dashboard.viewPlan')}</Text>
-            </TouchableOpacity>
+            {canPurchaseInApp && (
+              <TouchableOpacity onPress={() => router.push('/billing')}>
+                <Text style={styles.sectionLink}>{t('dashboard.viewPlan')}</Text>
+              </TouchableOpacity>
+            )}
           </View>
           <View style={styles.usageCard}>
             <UsageItem
@@ -254,11 +257,13 @@ export default function DashboardScreen() {
             icon={<CheckSquare size={24} color={COLORS.primary} />}
             onPress={() => router.push('/tasks')}
           />
-          <QuickActionButton
-            label={t('dashboard.subscription')}
-            icon={<CreditCard size={24} color={COLORS.primary} />}
-            onPress={() => router.push('/billing')}
-          />
+          {canPurchaseInApp && (
+            <QuickActionButton
+              label={t('dashboard.subscription')}
+              icon={<CreditCard size={24} color={COLORS.primary} />}
+              onPress={() => router.push('/billing')}
+            />
+          )}
         </View>
       </View>
 

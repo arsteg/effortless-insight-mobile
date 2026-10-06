@@ -70,6 +70,7 @@ import {
   DEFAULT_PROTECTION_ENABLED,
 } from '../../src/services/screenSecurity';
 import { getAppInfo, formatVersion } from '../../src/utils/appInfo';
+import { canPurchaseInApp } from '../../src/utils/inAppPurchases';
 import { THEME_MODES } from '../../src/theme/palettes';
 import {
   loadOfflinePreferences,
@@ -421,11 +422,13 @@ export default function ProfileScreen() {
           label={t('profile.editProfile')}
           onPress={handleEditProfile}
         />
-        <SettingItem
-          icon={<CreditCard size={20} color={COLORS.gray[500]} />}
-          label={t('profile.subscription')}
-          onPress={() => router.push('/billing')}
-        />
+        {canPurchaseInApp && (
+          <SettingItem
+            icon={<CreditCard size={20} color={COLORS.gray[500]} />}
+            label={t('profile.subscription')}
+            onPress={() => router.push('/billing')}
+          />
+        )}
         <SettingItem
           icon={<Shield size={20} color={COLORS.gray[500]} />}
           label={t('profile.security')}

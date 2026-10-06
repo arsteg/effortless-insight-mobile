@@ -14,6 +14,7 @@ import {
 } from 'react-native';
 import { AlertTriangle, X, ArrowUpRight } from 'lucide-react-native';
 import { SPACING, FONT_SIZES, BORDER_RADIUS } from '../../utils/constants';
+import { canPurchaseInApp } from '../../utils/inAppPurchases';
 import { PaywallState } from '../../types';
 import { Button } from '../common';
 import { useColors, useThemedStyles } from '../../theme/useTheme';
@@ -100,29 +101,37 @@ export function PaywallModal({ visible, paywall, onClose, onUpgrade }: PaywallMo
                 </View>
               )}
 
-              {/* Upgrade Prompt */}
-              <View style={styles.upgradeContainer}>
-                <Text style={styles.upgradeTitle}>Upgrade to unlock more</Text>
-                <Text style={styles.upgradeDescription}>
-                  {paywall.suggestedPlan
-                    ? `The ${paywall.suggestedPlan} plan includes higher limits for ${getActionLabel()}.`
-                    : `Upgrade your plan to get more ${getActionLabel()}.`}
-                </Text>
-              </View>
+              {/* Upgrade Prompt — not on iOS, see canPurchaseInApp */}
+              {canPurchaseInApp && (
+                <View style={styles.upgradeContainer}>
+                  <Text style={styles.upgradeTitle}>Upgrade to unlock more</Text>
+                  <Text style={styles.upgradeDescription}>
+                    {paywall.suggestedPlan
+                      ? `The ${paywall.suggestedPlan} plan includes higher limits for ${getActionLabel()}.`
+                      : `Upgrade your plan to get more ${getActionLabel()}.`}
+                  </Text>
+                </View>
+              )}
 
               {/* Action Buttons */}
               <View style={styles.actions}>
-                <Button
-                  title="View Plans"
-                  onPress={onUpgrade}
-                  variant="primary"
-                  fullWidth
-                  icon={<ArrowUpRight size={18} color={COLORS.white} />}
-                  iconPosition="right"
-                />
-                <TouchableOpacity style={styles.dismissButton} onPress={onClose}>
-                  <Text style={styles.dismissButtonText}>Maybe Later</Text>
-                </TouchableOpacity>
+                {canPurchaseInApp ? (
+                  <>
+                    <Button
+                      title="View Plans"
+                      onPress={onUpgrade}
+                      variant="primary"
+                      fullWidth
+                      icon={<ArrowUpRight size={18} color={COLORS.white} />}
+                      iconPosition="right"
+                    />
+                    <TouchableOpacity style={styles.dismissButton} onPress={onClose}>
+                      <Text style={styles.dismissButtonText}>Maybe Later</Text>
+                    </TouchableOpacity>
+                  </>
+                ) : (
+                  <Button title="OK" onPress={onClose} variant="primary" fullWidth />
+                )}
               </View>
             </View>
           </TouchableWithoutFeedback>

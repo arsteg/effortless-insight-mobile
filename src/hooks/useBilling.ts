@@ -36,6 +36,7 @@ import {
   ValidateCouponResponse,
 } from '../types';
 import { getApiErrorMessage } from '../services/api/client';
+import { canPurchaseInApp } from '../utils/inAppPurchases';
 
 // Query keys
 export const billingKeys = {
@@ -461,7 +462,9 @@ export function usePaywall(action: PaywallAction): {
     currentUsage: data.currentUsage,
     limit: data.limit,
     suggestedPlan: data.suggestedPlan,
-    message: data.reason || 'You have reached your plan limit.',
+    // The server's reason can say "Please upgrade your plan" — a purchase call to
+    // action iOS must not show (see canPurchaseInApp).
+    message: (canPurchaseInApp && data.reason) || 'You have reached your plan limit.',
   };
 
   return {

@@ -23,6 +23,7 @@ import { getApiErrorMessage } from '../../src/services/api';
 import { isNetworkError, NO_INTERNET_MESSAGE } from '../../src/services/api/client';
 import { UserDto } from '../../src/types';
 import { SPACING, FONT_SIZES, BORDER_RADIUS } from '../../src/utils/constants';
+import { canCreateAccountInApp } from '../../src/utils/accountCreation';
 import { useColors, useThemedStyles } from '../../src/theme/useTheme';
 import type { Palette } from '../../src/theme/palettes';
 import { useTranslation } from '../../src/hooks';
@@ -358,21 +359,24 @@ export default function LoginScreen() {
             </TouchableOpacity>
           )}
 
-          {/* OAuth Buttons */}
-          <OAuthButtons
-            mode="login"
-            disabled={isLoading}
-            onSuccess={handleOAuthSuccess}
-            onError={handleOAuthError}
-          />
+          {/* OAuth Buttons and Register Link — not on iOS, see canCreateAccountInApp */}
+          {canCreateAccountInApp && (
+            <>
+              <OAuthButtons
+                mode="login"
+                disabled={isLoading}
+                onSuccess={handleOAuthSuccess}
+                onError={handleOAuthError}
+              />
 
-          {/* Register Link */}
-          <View style={styles.registerContainer}>
-            <Text style={styles.registerText}>{t('auth.donTHaveAnAccount')} </Text>
-            <TouchableOpacity onPress={() => router.push('/(auth)/register')}>
-              <Text style={styles.registerLink}>{t('auth.signUp')}</Text>
-            </TouchableOpacity>
-          </View>
+              <View style={styles.registerContainer}>
+                <Text style={styles.registerText}>{t('auth.donTHaveAnAccount')} </Text>
+                <TouchableOpacity onPress={() => router.push('/(auth)/register')}>
+                  <Text style={styles.registerLink}>{t('auth.signUp')}</Text>
+                </TouchableOpacity>
+              </View>
+            </>
+          )}
         </View>
       </ScrollView>
     </KeyboardAvoidingView>

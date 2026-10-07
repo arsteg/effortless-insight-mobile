@@ -276,12 +276,17 @@ export default function ProfileScreen() {
       `You are currently logged in to: ${user?.organization?.name || 'Unknown Organization'}\n\nOrganization settings are available on the web app.`,
       [
         { text: 'OK' },
-        {
-          text: 'Open Web App',
-          onPress: () => {
-            Linking.openURL('https://app.effortlessinsight.in/settings/organization');
-          },
-        },
+        // The web app also sells plans, so iOS gets no button into it (see canPurchaseInApp).
+        ...(canPurchaseInApp
+          ? [
+              {
+                text: 'Open Web App',
+                onPress: () => {
+                  Linking.openURL('https://app.effortlessinsight.in/settings/organization');
+                },
+              },
+            ]
+          : []),
       ]
     );
   };

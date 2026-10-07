@@ -12,7 +12,7 @@ import {
   KeyboardAvoidingView,
   Linking,
 } from 'react-native';
-import { useRouter } from 'expo-router';
+import { Redirect, useRouter } from 'expo-router';
 import { useForm, Controller } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
@@ -23,6 +23,7 @@ import { Button, Input } from '../../src/components/common';
 import { OAuthButtons } from '../../src/components/auth';
 import { UserDto } from '../../src/types';
 import { SPACING, FONT_SIZES, BORDER_RADIUS } from '../../src/utils/constants';
+import { canCreateAccountInApp } from '../../src/utils/accountCreation';
 import { useColors, useThemedStyles } from '../../src/theme/useTheme';
 import type { Palette } from '../../src/theme/palettes';
 import { useTranslation } from '../../src/hooks';
@@ -58,7 +59,18 @@ const registerSchema = z
 
 type RegisterFormData = z.infer<typeof registerSchema>;
 
-export default function RegisterScreen() {
+/**
+ * iOS has no Sign up link, but a deep link could still land here — send it to
+ * login instead (see canCreateAccountInApp).
+ */
+export default function RegisterRoute() {
+  if (!canCreateAccountInApp) {
+    return <Redirect href="/(auth)/login" />;
+  }
+  return <RegisterScreen />;
+}
+
+function RegisterScreen() {
   const { t } = useTranslation();
   const styles = useThemedStyles(createStyles);
   const COLORS = useColors();

@@ -16,6 +16,7 @@ import { CheckCircle, Rocket, ArrowRight } from 'lucide-react-native';
 import { useAuthStore } from '../../src/stores';
 import { Button } from '../../src/components';
 import { SPACING, FONT_SIZES } from '../../src/utils/constants';
+import { canPurchaseInApp } from '../../src/utils/inAppPurchases';
 import { useColors, useThemedStyles } from '../../src/theme/useTheme';
 import type { Palette } from '../../src/theme/palettes';
 import { useTranslation } from '../../src/hooks';
@@ -95,13 +96,15 @@ export default function CompleteScreen() {
             </View>
           </View>
 
-          {/* Trial Info */}
-          <View style={styles.trialBadge}>
-            <Rocket size={16} color={COLORS.primary} />
-            <Text style={styles.trialText}>
-              14-day free trial started
-            </Text>
-          </View>
+          {/* Trial Info — not on iOS, which shows no plan details (see canPurchaseInApp) */}
+          {canPurchaseInApp && (
+            <View style={styles.trialBadge}>
+              <Rocket size={16} color={COLORS.primary} />
+              <Text style={styles.trialText}>
+                14-day free trial started
+              </Text>
+            </View>
+          )}
         </Animated.View>
       </View>
 

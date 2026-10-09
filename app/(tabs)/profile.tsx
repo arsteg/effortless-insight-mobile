@@ -13,6 +13,7 @@ import {
   Alert,
   Image,
   ActivityIndicator,
+  Platform,
 } from 'react-native';
 import { useRouter, useFocusEffect } from 'expo-router';
 import {
@@ -88,6 +89,11 @@ import { SPACING, FONT_SIZES, BORDER_RADIUS } from '../../src/utils/constants';
 import { Languages } from 'lucide-react-native';
 import { useColors, useThemedStyles } from '../../src/theme/useTheme';
 import type { Palette } from '../../src/theme/palettes';
+
+// help.effortlessinsight.in does not resolve yet (checked 2026-10-07), and App
+// Review rejects links that lead to an error page, so iOS hides Help Center.
+// Show it again once the help site is live.
+const showHelpCenter = Platform.OS !== 'ios';
 
 export default function ProfileScreen() {
   const styles = useThemedStyles(createStyles);
@@ -650,11 +656,13 @@ export default function ProfileScreen() {
           label="Support Tickets"
           onPress={() => router.push('/support')}
         />
-        <SettingItem
-          icon={<HelpCircle size={20} color={COLORS.gray[500]} />}
-          label={t('profile.helpCenter')}
-          onPress={handleHelpCenter}
-        />
+        {showHelpCenter && (
+          <SettingItem
+            icon={<HelpCircle size={20} color={COLORS.gray[500]} />}
+            label={t('profile.helpCenter')}
+            onPress={handleHelpCenter}
+          />
+        )}
         <SettingItem
           icon={<Info size={20} color={COLORS.gray[500]} />}
           label={t('profile.about')}

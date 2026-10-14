@@ -1,4 +1,4 @@
-﻿/**
+/**
  * Profile/Settings Screen
  */
 
@@ -428,6 +428,11 @@ export default function ProfileScreen() {
       <View style={styles.section}>
         <Text style={styles.sectionTitle}>{t('profile.account')}</Text>
 
+        <SettingItem
+          icon={<Link2 size={20} color={COLORS.gray[500]} />}
+          label="GST Email Sync"
+          onPress={() => router.push('/settings/email-sync')}
+        />
         <SettingItem
           icon={<User size={20} color={COLORS.gray[500]} />}
           label={t('profile.editProfile')}

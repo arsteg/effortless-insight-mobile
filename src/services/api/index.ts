@@ -10,3 +10,4 @@ export { notificationsApi } from './notifications';
 export { billingApi } from './billing';
 export { organizationsApi } from './organizations';
 export { usersApi } from './users';
+export * as emailSyncApi from './emailSync';

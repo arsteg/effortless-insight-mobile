@@ -135,8 +135,22 @@ interface AuthState {
 
 // Maps the profile API response to the app's UserDto (shared by initialize and
 // biometric unlock so the session-restore logic lives in one place).
+/**
+ * The API has returned names with leading/trailing whitespace (e.g.
+ * "   Mohammad Asad"). Left untrimmed, that breaks two unrelated-looking
+ * screens the same way: Home's greeting does `name.split(' ')[0]`, which on
+ * a leading space yields `''` — falsy, so it silently fell back to "there"
+ * (BUG-006) — and Profile's avatar takes `name.charAt(0)`, which is a space
+ * character that renders as a blank circle (BUG-012). Trimming once, at
+ * every point a UserDto enters this store, fixes both at the source instead
+ * of patching each screen's symptom separately.
+ */
+function normalizeUser(user: UserDto): UserDto {
+  return user.name === user.name.trim() ? user : { ...user, name: user.name.trim() };
+}
+
 function mapProfileToUser(profile: Awaited<ReturnType<typeof authApi.getProfile>>): UserDto {
-  return {
+  return normalizeUser({
     id: profile.id,
     email: profile.email,
     name: profile.name,
@@ -151,7 +165,7 @@ function mapProfileToUser(profile: Awaited<ReturnType<typeof authApi.getProfile>
       name: org.organizationName,
       role: org.role,
     })),
-  };
+  });
 }
 
 export const useAuthStore = create<AuthState>((set, get) => ({
@@ -223,32 +237,46 @@ export const useAuthStore = create<AuthState>((set, get) => ({
    * profile in the background. Shared by initialize() and biometric unlock.
    */
   restoreSession: async (cachedUser: UserDto) => {
+    // Normalize even the cached copy — it may have been written before this
+    // fix shipped, by a store state that never trimmed it.
+    const normalizedCachedUser = normalizeUser(cachedUser);
     set({
       isAuthenticated: true,
-      user: cachedUser,
-      needsOnboarding: !cachedUser.organization?.id,
+      user: normalizedCachedUser,
+      needsOnboarding: !normalizedCachedUser.organization?.id,
     });
-    try {
-      const profile = await authApi.getProfile();
-      const user = mapProfileToUser(profile);
-      await setUser(user);
-      set({ user, needsOnboarding: !user.organization?.id });
-    } catch (error) {
-      // Only de-authenticate when the server actually rejected the tokens.
-      // A network failure (offline cold start) must keep the cached session,
-      // otherwise offline support is defeated by being logged out on launch.
-      const status = isApiError(error) ? error.response?.status : undefined;
-      if (status === 401 || status === 403) {
-        await clearTokens();
-        await clearUser();
-        set({
-          isAuthenticated: false,
-          user: null,
-          needsOnboarding: false,
-          hasStoredSession: false,
-        });
+
+    // The profile refresh below used to be awaited here, which meant
+    // initialize() couldn't set isInitialized until it finished — and it
+    // inherits axios's 30s default timeout with no bound of its own. On a
+    // slow/stalled connection that held the splash screen up that whole
+    // time, and once Android's own splash display cap ran out first, the
+    // bare activity window showed through underneath — a stuck black screen
+    // (BUG-001). The cached user above is enough to unblock startup; refresh
+    // it in the background instead of gating the UI on the round-trip.
+    (async () => {
+      try {
+        const profile = await authApi.getProfile();
+        const user = mapProfileToUser(profile);
+        await setUser(user);
+        set({ user, needsOnboarding: !user.organization?.id });
+      } catch (error) {
+        // Only de-authenticate when the server actually rejected the tokens.
+        // A network failure (offline cold start) must keep the cached session,
+        // otherwise offline support is defeated by being logged out on launch.
+        const status = isApiError(error) ? error.response?.status : undefined;
+        if (status === 401 || status === 403) {
+          await clearTokens();
+          await clearUser();
+          set({
+            isAuthenticated: false,
+            user: null,
+            needsOnboarding: false,
+            hasStoredSession: false,
+          });
+        }
       }
-    }
+    })();
   },
 
   unlockWithBiometric: async () => {
@@ -290,7 +318,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       const loginResponse = response as LoginResponse;
       await setTokens(loginResponse.accessToken, loginResponse.refreshToken);
 
-      const user = loginResponse.user;
+      const user = loginResponse.user ? normalizeUser(loginResponse.user) : null;
       if (user) {
         await setUser(user);
       }

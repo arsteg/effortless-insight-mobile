@@ -64,6 +64,11 @@ export function SubscriptionCard({
 
   const totalSeats = subscription.seats.included + subscription.seats.additional;
 
+  // A free plan has no real recurring charge, so "next billing" is a
+  // meaningless date far in the future (seen: 1 Oct 2126) rather than
+  // something to act on — hide the row instead of showing it (BUG-027).
+  const hasBilling = subscription.pricing.total > 0;
+
   return (
     <View style={styles.container}>
       {/* Header */}
@@ -115,18 +120,20 @@ export function SubscriptionCard({
           </View>
         </View>
 
-        {/* Next Billing */}
-        <View style={styles.detailRow}>
-          <Calendar size={18} color={COLORS.gray[400]} />
-          <View style={styles.detailContent}>
-            <Text style={styles.detailLabel}>
-              {subscription.cancelAtPeriodEnd ? 'Expires on' : 'Next billing'}
-            </Text>
-            <Text style={styles.detailValue}>
-              {formatDate(subscription.nextBillingDate || subscription.currentPeriodEnd)}
-            </Text>
+        {/* Next Billing — skipped for a free plan; see hasBilling above */}
+        {hasBilling && (
+          <View style={styles.detailRow}>
+            <Calendar size={18} color={COLORS.gray[400]} />
+            <View style={styles.detailContent}>
+              <Text style={styles.detailLabel}>
+                {subscription.cancelAtPeriodEnd ? 'Expires on' : 'Next billing'}
+              </Text>
+              <Text style={styles.detailValue}>
+                {formatDate(subscription.nextBillingDate || subscription.currentPeriodEnd)}
+              </Text>
+            </View>
           </View>
-        </View>
+        )}
 
         {/* Seats */}
         <View style={styles.detailRow}>

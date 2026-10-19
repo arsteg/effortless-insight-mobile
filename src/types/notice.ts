@@ -23,8 +23,12 @@ export interface NoticeDto {
   gstin?: string;
   issueDate?: string;
   responseDeadline?: string;
-  daysRemaining?: number;
-  taxAmount?: number;
+  // The API sends `null` (not just omitting the field) for a notice with no
+  // due date — code reading this must check with `== null`, not
+  // `=== undefined`, or a null slips through into a template literal as the
+  // literal word "null" (BUG-003).
+  daysRemaining?: number | null;
+  taxAmount?: number | null;
   penaltyAmount?: number;
   status: NoticeStatus;
   priority: NoticePriority;

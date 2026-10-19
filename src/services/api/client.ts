@@ -98,12 +98,24 @@ apiClient.interceptors.response.use(
       originalRequest._retry = true;
       isRefreshing = true;
 
-      try {
-        const refreshToken = await getRefreshToken();
-        if (!refreshToken) {
-          throw new Error('No refresh token available');
-        }
+      // A 401 with no stored refresh token means this device was never
+      // logged in (fresh install) or was already logged out — there is no
+      // session to have "expired". Only a 401 that happens AFTER a refresh
+      // token existed and was rejected by the server is a genuine expiry
+      // (BUG-001): treating the two the same showed "Session expired" on a
+      // clean install, before the user had ever signed in.
+      const refreshToken = await getRefreshToken();
+      if (!refreshToken) {
+        // Reject anything that queued up behind this request while it waited
+        // — without this they would hang forever, since the normal
+        // processQueue() calls below are never reached on this path.
+        processQueue(error as unknown as Error, null);
+        isRefreshing = false;
+        await clearTokens();
+        return Promise.reject(error);
+      }
 
+      try {
         const response = await axios.post(`${API_BASE_URL}/auth/refresh`, {
           refreshToken,
         });

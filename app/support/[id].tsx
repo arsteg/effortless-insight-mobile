@@ -24,13 +24,23 @@ import {
 import { SupportTicketMessage, SupportTicketStatus } from '../../src/services/api/support';
 import { Button, Input, LoadingSpinner, EmptyState } from '../../src/components/common';
 import { COLORS, SPACING, FONT_SIZES, BORDER_RADIUS } from '../../src/utils/constants';
+import { t } from '../../src/i18n';
 
+/** English fallback, used only when a status has no i18n entry. */
 const STATUS_LABELS: Record<SupportTicketStatus, string> = {
   open: 'Open',
   in_progress: 'In progress',
   resolved: 'Resolved',
   closed: 'Closed',
 };
+
+/** In the active language (BUG-030). */
+function statusLabel(status: SupportTicketStatus): string {
+  const key = `supportTicket.${status}`;
+  const translated = t(key);
+  if (translated !== key && !translated.startsWith('[missing')) return translated;
+  return STATUS_LABELS[status];
+}
 
 export default function SupportTicketScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
@@ -93,7 +103,7 @@ export default function SupportTicketScreen() {
           {ticket.subject}
         </Text>
         <View style={styles.headerRow}>
-          <Text style={styles.statusLabel}>{STATUS_LABELS[ticket.status]}</Text>
+          <Text style={styles.statusLabel}>{statusLabel(ticket.status)}</Text>
           {!isClosed && (
             <TouchableOpacity style={styles.closeButton} onPress={handleClose}>
               <CheckCircle2 size={14} color={COLORS.gray[600]} />

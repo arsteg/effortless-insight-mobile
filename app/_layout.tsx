@@ -466,6 +466,18 @@ function RootLayoutNav() {
             presentation: 'card',
           }}
         />
+        {/* Without this, the root Stack renders its own default header
+            ("support", auto-titled from the folder name) ON TOP of
+            app/support/_layout.tsx's own header — two stacked title bars
+            (BUG-025), the same family of bug as the Alerts tab/header
+            collision fixed earlier. */}
+        <Stack.Screen
+          name="support"
+          options={{
+            headerShown: false,
+            presentation: 'card',
+          }}
+        />
       </Stack>
       <ToastContainer />
 

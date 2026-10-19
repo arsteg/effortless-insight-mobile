@@ -1305,6 +1305,11 @@ const createStyles = (COLORS: Palette) =>
     justifyContent: 'center',
     alignItems: 'center',
     padding: SPACING.xl,
+    // Biases the centered frame+hint group upward so the hint text below the
+    // frame doesn't land under the absolutely-positioned bottom controls
+    // (gallery/capture buttons) on shorter screens — it was only clear of
+    // them by coincidence of screen height before (BUG-024).
+    paddingBottom: SPACING.xl + 150,
   },
   frame: {
     width: '90%',

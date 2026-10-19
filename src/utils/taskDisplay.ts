@@ -19,6 +19,12 @@
 
 import type { TaskPriority, TaskStatus } from '../types/api';
 import { COLORS, PRIORITY_COLORS } from './constants';
+import { t } from '../i18n';
+
+/** `t()` returns this exact shape when a key has no translation anywhere. */
+function isTranslated(value: string, key: string): boolean {
+  return value !== key && !value.startsWith('[missing');
+}
 
 // ---------------------------------------------------------------------------
 // Status
@@ -40,6 +46,7 @@ export const TASK_STATUSES: readonly TaskStatus[] = [
   'archived',
 ] as const;
 
+/** English fallback, used only when a status has no i18n entry. */
 const STATUS_LABELS: Record<TaskStatus, string> = {
   todo: 'To Do',
   in_progress: 'In Progress',
@@ -60,8 +67,15 @@ const TASK_STATUS_COLORS: Record<TaskStatus, string> = {
   archived: COLORS.gray[400],
 };
 
-/** Human-readable status. Falls back to the raw value rather than blank. */
+/**
+ * Human-readable status, in the active language (BUG-030). `t()` is the
+ * module-level i18n function (src/i18n/index.ts), not the useTranslation()
+ * hook, so this works from both components and plain call sites like
+ * taskReminders.ts that run outside render.
+ */
 export function statusLabel(status: string): string {
+  const translated = t(`tasks.statusLabels.${status}`);
+  if (isTranslated(translated, `tasks.statusLabels.${status}`)) return translated;
   return STATUS_LABELS[status as TaskStatus] ?? status.replace(/_/g, ' ');
 }
 
@@ -95,6 +109,7 @@ export const TASK_PRIORITIES: readonly TaskPriority[] = [
   'low',
 ] as const;
 
+/** English fallback, used only when a priority has no i18n entry. */
 const PRIORITY_LABELS: Record<TaskPriority, string> = {
   critical: 'Critical',
   high: 'High',
@@ -103,6 +118,8 @@ const PRIORITY_LABELS: Record<TaskPriority, string> = {
 };
 
 export function priorityLabel(priority: string): string {
+  const translated = t(`tasks.priorityLabels.${priority}`);
+  if (isTranslated(translated, `tasks.priorityLabels.${priority}`)) return translated;
   return PRIORITY_LABELS[priority as TaskPriority] ?? priority;
 }
 

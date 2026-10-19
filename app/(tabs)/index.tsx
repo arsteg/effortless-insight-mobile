@@ -21,6 +21,7 @@ import { useAuthStore } from '../../src/stores';
 import { LoadingSpinner, EmptyState } from '../../src/components/common';
 import { SPACING, FONT_SIZES, BORDER_RADIUS, RISK_COLORS } from '../../src/utils/constants';
 import { canPurchaseInApp } from '../../src/utils/inAppPurchases';
+import { formatCurrency } from '../../src/utils/format';
 import { format, differenceInDays } from 'date-fns';
 import { useColors, useThemedStyles } from '../../src/theme/useTheme';
 import type { Palette } from '../../src/theme/palettes';
@@ -70,7 +71,7 @@ export default function DashboardScreen() {
 
   // Get urgent notices (due within 7 days)
   const urgentNotices = (noticesData?.pages[0]?.notices || [])
-    .filter((n) => n.daysRemaining !== undefined && n.daysRemaining <= 7)
+    .filter((n) => n.daysRemaining != null && n.daysRemaining <= 7)
     .slice(0, 3);
 
   // Get greeting based on time
@@ -81,7 +82,15 @@ export default function DashboardScreen() {
     return t('dashboard.goodEvening');
   };
 
-  const isLoading = statsLoading && noticesLoading && tasksLoading;
+  // Was `&&`: the full-screen spinner only showed while ALL THREE queries
+  // were still loading, so the instant the fastest one settled, the real
+  // dashboard rendered using default/empty data for the other two —
+  // "0 Active", "No urgent deadlines", "All tasks completed!" — all genuine
+  // empty-state copy, shown while data was still in flight, not actually
+  // empty (BUG-040). Swapping the whole screen tree the moment any query
+  // settles is also the likeliest cause of a tap landing on Home instead of
+  // the tab the user actually pressed right after login (BUG-038).
+  const isLoading = statsLoading || noticesLoading || tasksLoading;
 
   if (isLoading) {
     return <LoadingSpinner fullScreen message={t('dashboard.loadingDashboard')} />;
@@ -304,7 +313,7 @@ function NoticeCard({
   notice,
   onPress,
 }: {
-  notice: { id: string; noticeType?: string; daysRemaining?: number; taxAmount?: number; riskLevel?: string };
+  notice: { id: string; noticeType?: string; daysRemaining?: number | null; taxAmount?: number | null; riskLevel?: string };
   onPress: () => void;
 }) {
   const styles = useThemedStyles(createStyles);
@@ -315,9 +324,13 @@ function NoticeCard({
   };
 
   // Deadline tone: overdue = coral, ≤3 days = amber, else comfortable mint.
+  // `== null` (not `=== undefined`) so a notice with no due date is caught
+  // whether the API omits daysRemaining or sends it as null — the latter
+  // used to fall through to the numeric branches below and render the
+  // literal word "null" (BUG-003: "null days left").
   const days = notice.daysRemaining;
   const deadlineTone =
-    days === undefined
+    days == null
       ? { fg: COLORS.gray[500], bg: COLORS.gray[100] }
       : days < 0
         ? { fg: COLORS.coral, bg: COLORS.coralLight }
@@ -334,14 +347,14 @@ function NoticeCard({
       <View style={styles.noticeInfo}>
         <Text style={styles.noticeType} numberOfLines={1}>{notice.noticeType || 'Notice'}</Text>
         <Text style={styles.noticeAmount}>
-          {notice.taxAmount ? `₹${(notice.taxAmount / 100000).toFixed(1)}L` : '-'}
+          {formatCurrency(notice.taxAmount, { compact: true })}
         </Text>
       </View>
       <View style={styles.noticeDeadline}>
         <View style={[styles.deadlineChip, { backgroundColor: deadlineTone.bg }]}>
           <Clock color={deadlineTone.fg} size={12} />
           <Text style={[styles.deadlineChipText, { color: deadlineTone.fg }]}>
-            {days === undefined ? '-' : days < 0 ? `${Math.abs(days)}d overdue` : `${days}d left`}
+            {days == null ? 'No due date' : days < 0 ? `${Math.abs(days)}d overdue` : `${days}d left`}
           </Text>
         </View>
       </View>
@@ -406,8 +419,10 @@ function UsageItem({
 }) {
   const styles = useThemedStyles(createStyles);
   const COLORS = useColors();
-  // Consider unlimited if limit is 0 or very high (>= 10000)
-  const isUnlimited = limit === 0 || limit >= 10000;
+  // The backend's actual "unlimited" sentinel is a 0 limit — the old
+  // `|| limit >= 10000` guess misreported real, finite limits (e.g. 10,000
+  // API calls) as unlimited. Same root cause as BUG-028 in UsageBar.tsx.
+  const isUnlimited = limit === 0;
   const percentage = isUnlimited ? 0 : Math.min((used / limit) * 100, 100);
   const getColor = () => {
     if (isUnlimited) return COLORS.primary;

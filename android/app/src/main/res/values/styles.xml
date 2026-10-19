@@ -4,6 +4,10 @@
     <item name="colorPrimary">@color/colorPrimary</item>
     <item name="android:statusBarColor">@android:color/transparent</item>
     <item name="android:navigationBarColor">@android:color/transparent</item>
+    <!-- Without this, the window Android reveals once its splash-screen
+         display cap is hit (BUG-001) has no background of its own and shows
+         black for whatever is left of the JS-side wait. -->
+    <item name="android:windowBackground">@color/splashscreen_background</item>
   </style>
   <style name="Theme.App.SplashScreen" parent="Theme.SplashScreen">
     <item name="windowSplashScreenBackground">@color/splashscreen_background</item>

@@ -4,12 +4,14 @@
 
 import { Tabs, useRouter } from 'expo-router';
 import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Home, FileText, Camera, CheckSquare, Bell, User, CalendarDays, Bot } from 'lucide-react-native';
 import { SPACING, FONT_SIZES, BORDER_RADIUS } from '../../src/utils/constants';
 import { useUnreadCount } from '../../src/hooks/useNotifications';
 import { useHasFeature } from '../../src/hooks/useBilling';
 import { useColors, useThemedStyles } from '../../src/theme/useTheme';
 import type { Palette } from '../../src/theme/palettes';
+import { useTranslation } from '../../src/hooks';
 
 function NotificationTabIcon({ color, size }: { color: string; size: number }) {
   const styles = useThemedStyles(createStyles);
@@ -73,8 +75,16 @@ function CalendarHeaderButton() {
 }
 
 export default function TabLayout() {
+  const { t } = useTranslation();
   const styles = useThemedStyles(createStyles);
   const COLORS = useColors();
+  // React Navigation normally pads the tab bar for the bottom safe area
+  // itself, but only when it's left to size the bar on its own — setting an
+  // explicit tabBarStyle.height (as below) opts out of that automatic
+  // handling. On Android 15+'s mandatory edge-to-edge display (this app
+  // targets API 36) that left the bar's fixed 62px drawing under the system
+  // gesture bar, covering the "Tasks" label on every screen (BUG-009).
+  const insets = useSafeAreaInsets();
   return (
     <Tabs
       screenOptions={{
@@ -84,9 +94,9 @@ export default function TabLayout() {
           backgroundColor: COLORS.white,
           borderTopWidth: 1,
           borderTopColor: COLORS.gray[200],
-          paddingBottom: 6,
+          paddingBottom: 6 + insets.bottom,
           paddingTop: 6,
-          height: 62,
+          height: 62 + insets.bottom,
         },
         tabBarLabelStyle: {
           fontSize: 12,
@@ -109,7 +119,7 @@ export default function TabLayout() {
       <Tabs.Screen
         name="index"
         options={{
-          title: 'Home',
+          title: t('tabs.home'),
           tabBarIcon: ({ color, size }) => <Home color={color} size={size} />,
           headerTitle: 'EffortlessInsight',
           headerRight: () => <AssistantHeaderButton />,
@@ -118,30 +128,34 @@ export default function TabLayout() {
       <Tabs.Screen
         name="notices"
         options={{
-          title: 'Notices',
+          title: t('tabs.notices'),
           tabBarIcon: ({ color, size }) => <FileText color={color} size={size} />,
-          headerTitle: 'Notices',
+          headerTitle: t('tabs.notices'),
         }}
       />
       <Tabs.Screen
         name="upload"
         options={{
-          title: 'Scan',
+          title: t('tabs.upload'),
           tabBarIcon: ({ color, focused }) => (
             <View style={[styles.scanButton, focused && styles.scanButtonActive]}>
               <Camera color={COLORS.white} size={24} />
             </View>
           ),
-          headerTitle: 'Scan Notice',
+          headerTitle: t('upload.title'),
           tabBarLabel: () => null, // Hide label for center button
+          // The label above is hidden for sighted users, but TalkBack still
+          // needs something to announce — without this it read only "button"
+          // (BUG-039).
+          tabBarAccessibilityLabel: 'Scan notice',
         }}
       />
       <Tabs.Screen
         name="tasks"
         options={{
-          title: 'Tasks',
+          title: t('tabs.tasks'),
           tabBarIcon: ({ color, size }) => <CheckSquare color={color} size={size} />,
-          headerTitle: 'My Tasks',
+          headerTitle: t('dashboard.myTasks'),
           // The calendar lives here rather than as a seventh tab: it shows the
           // deadlines of these tasks (and of notices), and seven tabs does not
           // fit a phone's bottom bar (TC-MOB-047).
@@ -151,19 +165,19 @@ export default function TabLayout() {
       <Tabs.Screen
         name="notifications"
         options={{
-          title: 'Alerts',
+          title: t('tabs.alerts'),
           tabBarIcon: ({ color, size }) => (
             <NotificationTabIcon color={color as string} size={size} />
           ),
-          headerTitle: 'Notifications',
+          headerTitle: t('tabs.notifications'),
         }}
       />
       <Tabs.Screen
         name="profile"
         options={{
-          title: 'Profile',
+          title: t('tabs.profile'),
           tabBarIcon: ({ color, size }) => <User color={color} size={size} />,
-          headerTitle: 'Profile',
+          headerTitle: t('tabs.profile'),
         }}
       />
     </Tabs>

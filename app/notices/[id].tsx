@@ -19,6 +19,7 @@ import {
   ActivityIndicator,
 } from 'react-native';
 import * as WebBrowser from 'expo-web-browser';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import {
   FileText,
@@ -59,7 +60,6 @@ import { useNotice, useWorkflowProgress, useAttachments, useAdvanceWorkflow, use
 import { useNoticeTasks, useComments, useCreateComment, useCreateTask, useDocumentRequests, useSubmitDocument, useNoticeActivity } from '../../src/hooks/useTasks';
 import { useTranslation } from '../../src/hooks';
 import * as DocumentPicker from 'expo-document-picker';
-import * as Linking from 'expo-linking';
 import {
   LoadingSpinner,
   Button,
@@ -95,7 +95,8 @@ import {
   statusLabel as taskStatusLabel,
   statusColor as taskStatusColor,
 } from '../../src/utils/taskDisplay';
-import { SPACING, FONT_SIZES, BORDER_RADIUS, RISK_COLORS, STATUS_COLORS } from '../../src/utils/constants';
+import { SPACING, FONT_SIZES, BORDER_RADIUS, RISK_COLORS, STATUS_COLORS, PRIORITY_COLORS } from '../../src/utils/constants';
+import { formatCurrency, formatDate } from '../../src/utils/format';
 import { NoticeDetailDto, TaskDto, CommentResponseDto, DocumentRequestDto, DocumentRequestStatus, ResponseDto, NoticeResponseStatus, ActivityDto, CommentVisibility } from '../../src/types';
 import { useColors, useThemedStyles } from '../../src/theme/useTheme';
 import type { Palette } from '../../src/theme/palettes';
@@ -106,6 +107,7 @@ export default function NoticeDetailScreen() {
   const { t } = useTranslation();
   const styles = useThemedStyles(createStyles);
   const COLORS = useColors();
+  const insets = useSafeAreaInsets();
   const { id } = useLocalSearchParams<{ id: string }>();
   const router = useRouter();
   const [activeTab, setActiveTab] = useState<TabType>('overview');
@@ -207,10 +209,7 @@ export default function NoticeDetailScreen() {
   const handleShare = async () => {
     if (!notice) return;
     try {
-      const message = buildNoticeShareMessage(
-        notice,
-        Linking.createURL(`notices/${notice.id}`)
-      );
+      const message = buildNoticeShareMessage(notice);
       await Share.share(
         { message, title: buildNoticeShareTitle(notice) },
         { subject: buildNoticeShareTitle(notice) }
@@ -571,12 +570,17 @@ export default function NoticeDetailScreen() {
           </View>
         )}
 
-        <View style={{ height: 100 }} />
+        {/* Clears the fixed Change Status bar below, including its own
+            safe-area padding — a plain 100px buffer left content (notably
+            the Comments compose box) hidden under the bar on phones with a
+            tall gesture-bar inset, only visible after scrolling (BUG-009 /
+            BUG-022). */}
+        <View style={{ height: canChangeStatus ? 100 + insets.bottom : 0 }} />
       </ScrollView>
 
       {/* Bottom Action */}
       {canChangeStatus && (
-        <View style={styles.bottomAction}>
+        <View style={[styles.bottomAction, { paddingBottom: SPACING.md + insets.bottom }]}>
           <Button
             title={t('noticeDetail.changeStatus')}
             onPress={() => setShowTransitionModal(true)}
@@ -731,10 +735,23 @@ function NoticeHeader({
     return RISK_COLORS[riskLevel as keyof typeof RISK_COLORS] || COLORS.gray[400];
   };
 
-  const formatCurrency = (amount?: number) => {
-    if (!amount) return '-';
-    return `₹${amount.toLocaleString()}`;
+  const getPriorityColor = (priority?: string) => {
+    if (!priority) return COLORS.gray[400];
+    return PRIORITY_COLORS[priority as keyof typeof PRIORITY_COLORS] || COLORS.gray[400];
   };
+
+  // Penalty/interest exist in the API response but were never rendered
+  // anywhere in the app (BUG-019) — fold them into the headline demand and
+  // spell out the breakdown underneath so the total isn't a mystery.
+  const totalDemand =
+    (notice.taxAmount || 0) + (notice.penaltyAmount || 0) + (notice.interestAmount || 0);
+  const hasExtraCharges = !!(notice.penaltyAmount || notice.interestAmount);
+
+  // The days-left/overdue count below is computed server-side from the
+  // Extended Deadline, not the Response Deadline shown elsewhere — without
+  // this note the two numbers look contradictory (BUG-015).
+  const usesExtendedDeadline =
+    !!notice.extendedDeadline && notice.extendedDeadline !== notice.responseDeadline;
 
   return (
     <View style={styles.header}>
@@ -746,11 +763,19 @@ function NoticeHeader({
           )}
         </View>
         <View style={styles.headerActions}>
+          {notice.priority && (
+            <View style={[styles.riskBadge, { backgroundColor: `${getPriorityColor(notice.priority)}1A` }]}>
+              <View style={[styles.riskDot, { backgroundColor: getPriorityColor(notice.priority) }]} />
+              <Text style={[styles.riskText, { color: getPriorityColor(notice.priority) }]}>
+                {t('notices.priorityBadge', { value: t(`analysis.priority.${notice.priority}`) }).toUpperCase()}
+              </Text>
+            </View>
+          )}
           {notice.riskLevel && (
             <View style={[styles.riskBadge, { backgroundColor: `${getRiskColor(notice.riskLevel)}1A` }]}>
               <View style={[styles.riskDot, { backgroundColor: getRiskColor(notice.riskLevel) }]} />
               <Text style={[styles.riskText, { color: getRiskColor(notice.riskLevel) }]}>
-                {notice.riskLevel.toUpperCase()} RISK
+                {t('notices.riskBadge', { value: t(`analysis.priority.${notice.riskLevel}`) }).toUpperCase()}
               </Text>
             </View>
           )}
@@ -786,7 +811,7 @@ function NoticeHeader({
 
       <View style={styles.headerStats}>
         <View style={styles.statItem}>
-          <Text style={styles.statValue}>{formatCurrency(notice.taxAmount)}</Text>
+          <Text style={styles.statValue}>{formatCurrency(hasExtraCharges ? totalDemand : notice.taxAmount)}</Text>
           <Text style={styles.statLabel}>{t('noticeDetail.demand')}</Text>
         </View>
         <View style={styles.statDivider} />
@@ -794,15 +819,15 @@ function NoticeHeader({
           <Text
             style={[
               styles.statValue,
-              notice.daysRemaining !== undefined &&
+              notice.daysRemaining != null &&
                 notice.daysRemaining < 0 && { color: COLORS.error },
             ]}
           >
-            {notice.daysRemaining !== undefined
+            {notice.daysRemaining != null
               ? notice.daysRemaining < 0
                 ? `${Math.abs(notice.daysRemaining)} days overdue`
                 : `${notice.daysRemaining} days`
-              : '-'}
+              : 'No due date'}
           </Text>
           <Text style={styles.statLabel}>{t('noticeDetail.deadline')}</Text>
         </View>
@@ -812,6 +837,23 @@ function NoticeHeader({
           <Text style={styles.statLabel}>{t('noticeDetail.riskScore')}</Text>
         </View>
       </View>
+
+      {hasExtraCharges && (
+        <Text style={styles.headerNote}>
+          Includes{' '}
+          {[
+            notice.penaltyAmount ? `${formatCurrency(notice.penaltyAmount)} penalty` : null,
+            notice.interestAmount ? `${formatCurrency(notice.interestAmount)} interest` : null,
+          ]
+            .filter(Boolean)
+            .join(' + ')}
+        </Text>
+      )}
+      {usesExtendedDeadline && (
+        <Text style={styles.headerNote}>
+          Countdown uses the extended deadline ({formatDate(notice.extendedDeadline)}); Response Deadline is {formatDate(notice.responseDeadline)}.
+        </Text>
+      )}
     </View>
   );
 }
@@ -902,7 +944,7 @@ function WorkflowStages({
             </View>
             <Text
               style={[styles.stageName, stage.isCurrentStage && styles.stageNameActive]}
-              numberOfLines={1}
+              numberOfLines={2}
             >
               {stage.name}
             </Text>
@@ -930,10 +972,10 @@ function OverviewTab({ notice }: { notice: NoticeDetailDto }) {
       <InfoRow label={t('noticeDetail.noticeType')} value={notice.noticeType} />
       <InfoRow label={t('noticeDetail.category')} value={notice.noticeCategory} />
       <InfoRow label="GSTIN" value={notice.gstin} />
-      <InfoRow label={t('noticeDetail.issueDate')} value={notice.issueDate ? new Date(notice.issueDate).toLocaleDateString() : '-'} />
-      <InfoRow label={t('noticeDetail.responseDeadline')} value={notice.responseDeadline ? new Date(notice.responseDeadline).toLocaleDateString() : '-'} />
+      <InfoRow label={t('noticeDetail.issueDate')} value={notice.issueDate ? formatDate(notice.issueDate) : '-'} />
+      <InfoRow label={t('noticeDetail.responseDeadline')} value={notice.responseDeadline ? formatDate(notice.responseDeadline) : '-'} />
       <InfoRow label={t('noticeDetail.issuingAuthority')} value={notice.issuingAuthority} />
-      <InfoRow label={t('noticeDetail.period')} value={notice.periodFrom && notice.periodTo ? `${new Date(notice.periodFrom).toLocaleDateString()} - ${new Date(notice.periodTo).toLocaleDateString()}` : '-'} />
+      <InfoRow label={t('noticeDetail.period')} value={notice.periodFrom && notice.periodTo ? `${formatDate(notice.periodFrom)} - ${formatDate(notice.periodTo)}` : '-'} />
       {notice.tags && notice.tags.length > 0 && (
         <View style={styles.tagsContainer}>
           <Text style={styles.infoLabel}>{t('noticeDetail.tags')}</Text>
@@ -977,7 +1019,7 @@ function AnalysisTab({ notice }: { notice: NoticeDetailDto }) {
   const deadlineLabel =
     days === undefined || days === null
       ? notice.responseDeadline
-        ? new Date(notice.responseDeadline).toLocaleDateString()
+        ? formatDate(notice.responseDeadline)
         : t('analysis.noDeadline')
       : days < 0
         ? t('analysis.overdue', { count: Math.abs(days) })
@@ -1021,7 +1063,7 @@ function AnalysisTab({ notice }: { notice: NoticeDetailDto }) {
                 ]}
               >
                 <View style={[styles.riskDot, { backgroundColor: RISK_COLORS[notice.riskLevel as keyof typeof RISK_COLORS] || COLORS.gray[400] }]} />
-                <Text style={[styles.riskText, { color: RISK_COLORS[notice.riskLevel as keyof typeof RISK_COLORS] || COLORS.gray[600] }]}>{notice.riskLevel.toUpperCase()} RISK</Text>
+                <Text style={[styles.riskText, { color: RISK_COLORS[notice.riskLevel as keyof typeof RISK_COLORS] || COLORS.gray[600] }]}>{t('notices.riskBadge', { value: t(`analysis.priority.${notice.riskLevel}`) }).toUpperCase()}</Text>
               </View>
             )}
             {notice.riskScore !== undefined && notice.riskScore !== null && (
@@ -1463,7 +1505,7 @@ function TasksTab({ tasks, noticeId }: { tasks: TaskDto[]; noticeId: string }) {
                       <Text
                         style={[styles.dueDateText, task.isOverdue && { color: COLORS.error }]}
                       >
-                        {new Date(task.dueDate).toLocaleDateString()}
+                        {formatDate(task.dueDate)}
                       </Text>
                     </View>
                   )}
@@ -1699,7 +1741,7 @@ function CommentsTab({ comments, noticeId }: { comments: CommentResponseDto[]; n
                     )}
                   </View>
                   <Text style={styles.commentTime}>
-                    {new Date(comment.createdAt).toLocaleDateString()}
+                    {formatDate(comment.createdAt)}
                   </Text>
                 </View>
                 {renderCommentContent(comment.content, comment.mentions)}
@@ -1861,14 +1903,6 @@ function DocumentRequestsTab({
       case 'cancelled': return 'Cancelled';
       default: return status;
     }
-  };
-
-  const formatDate = (dateStr: string) => {
-    return new Date(dateStr).toLocaleDateString('en-US', {
-      month: 'short',
-      day: 'numeric',
-      year: 'numeric',
-    });
   };
 
   if (requests.length === 0) {
@@ -2083,17 +2117,13 @@ function ActivityTab({
     if (diffMins < 60) return `${diffMins}m ago`;
     if (diffHours < 24) return `${diffHours}h ago`;
     if (diffDays < 7) return `${diffDays}d ago`;
-    return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+    return formatDate(date, 'dd MMM');
   };
 
   const groupActivitiesByDate = (items: ActivityDto[]) => {
     const groups: { [key: string]: ActivityDto[] } = {};
     items.forEach((item) => {
-      const date = new Date(item.timestamp).toLocaleDateString('en-US', {
-        month: 'long',
-        day: 'numeric',
-        year: 'numeric',
-      });
+      const date = formatDate(item.timestamp, 'dd MMMM yyyy');
       if (!groups[date]) groups[date] = [];
       groups[date].push(item);
     });
@@ -2255,6 +2285,11 @@ const createStyles = (COLORS: Palette) =>
     width: 1,
     backgroundColor: COLORS.gray[200],
     marginHorizontal: SPACING.md,
+  },
+  headerNote: {
+    fontSize: FONT_SIZES.xs,
+    color: COLORS.gray[500],
+    marginTop: SPACING.sm,
   },
   currentStatusBadge: {
     alignSelf: 'flex-start',

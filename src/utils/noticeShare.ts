@@ -13,6 +13,13 @@
  */
 
 import type { UserRole } from '../types/api';
+import { statusLabel } from './noticeStatus';
+
+/** effortlessinsight:// only opens for people who already have the app
+ * installed; anyone else gets nothing. The web app serves the same notice
+ * at this path, so that's what recipients outside the app actually need
+ * (BUG-033). */
+const WEB_BASE_URL = 'https://effortlessinsight.in';
 
 /** Roles permitted to share a notice outside the app. */
 const SHARING_ROLES: readonly UserRole[] = ['owner', 'admin', 'manager', 'ca'] as const;
@@ -49,10 +56,7 @@ function formatDeadline(iso?: string): string | undefined {
  * included only when it has a value — a summary full of "undefined" is worse
  * than a short one.
  */
-export function buildNoticeShareMessage(
-  notice: ShareableNotice,
-  deepLink?: string
-): string {
+export function buildNoticeShareMessage(notice: ShareableNotice): string {
   const lines: string[] = ['GST Notice'];
 
   if (notice.noticeNumber) lines.push(`Notice: ${notice.noticeNumber}`);
@@ -60,16 +64,15 @@ export function buildNoticeShareMessage(
   if (notice.gstin) lines.push(`GSTIN: ${notice.gstin}`);
   if (notice.issuingAuthority) lines.push(`Issued by: ${notice.issuingAuthority}`);
 
-  lines.push(`Status: ${notice.status.replace(/_/g, ' ')}`);
+  lines.push(`Status: ${statusLabel(notice.status)}`);
 
   const deadline = formatDeadline(notice.responseDeadline);
   if (deadline) lines.push(`Response deadline: ${deadline}`);
 
-  if (deepLink) {
-    lines.push('', `Open in EffortlessInsight: ${deepLink}`);
-  }
-
-  lines.push('', 'Shared from EffortlessInsight');
+  // A real https:// link works for a recipient without the app installed —
+  // the old effortlessinsight:// deep link opened nothing for them (BUG-033).
+  lines.push(`Open in EffortlessInsight: ${WEB_BASE_URL}/notices/${notice.id}`);
+  lines.push('Shared from EffortlessInsight');
 
   return lines.join('\n');
 }

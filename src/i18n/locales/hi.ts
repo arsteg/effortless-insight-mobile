@@ -33,6 +33,7 @@ export default {
     tasks: 'कार्य',
     profile: 'प्रोफ़ाइल',
     notifications: 'सूचनाएं',
+    alerts: 'अलर्ट',
   },
 
   // Dashboard
@@ -52,7 +53,10 @@ export default {
     goodMorning: 'सुप्रभात',
     goodAfternoon: 'नमस्कार',
     goodEvening: 'शुभ संध्या',
-    there: 'वहाँ',
+    // Was 'वहाँ' ("that place" — a location), a literal translation of the
+    // English filler "there" ("Good Morning, there!"), read out as nonsense
+    // in Hindi (BUG-030). This is a casual address term instead.
+    there: 'मित्र',
     complianceOverview: 'आपका अनुपालन अवलोकन',
     loadingDashboard: 'डैशबोर्ड लोड हो रहा है...',
     active: 'सक्रिय',
@@ -105,6 +109,26 @@ export default {
     sourceManual: 'मैनुअल',
     sourceUpload: 'अपलोड',
     immediateAttention: 'तत्काल ध्यान आवश्यक',
+    priorityBadge: '{{value}} प्राथमिकता',
+    riskBadge: '{{value}} जोखिम',
+  },
+
+  noticeStatus: {
+    uploaded: 'अपलोड किया गया',
+    processing: 'प्रोसेसिंग',
+    analyzed: 'विश्लेषित',
+    in_progress: 'प्रगति पर',
+    responded: 'उत्तर दिया गया',
+    closed: 'बंद',
+    archived: 'संग्रहीत',
+    failed: 'विफल',
+  },
+
+  supportTicket: {
+    open: 'खुला',
+    in_progress: 'प्रगति पर',
+    resolved: 'हल हो गया',
+    closed: 'बंद',
   },
 
   // Notice Detail
@@ -268,6 +292,8 @@ export default {
       done: 'पूर्ण',
       blocked: 'अवरुद्ध',
       on_hold: 'रोक पर',
+      cancelled: 'रद्द',
+      archived: 'संग्रहीत',
     },
     total: 'Total',
     overdueShown: 'Overdue shown',

@@ -335,7 +335,28 @@ export default function TasksScreen() {
         keyExtractor={keyExtractor}
         ListHeaderComponent={renderHeader}
         ListFooterComponent={renderFooter}
-        ListEmptyComponent={<EmptyState type="tasks" />}
+        ListEmptyComponent={
+          // "All caught up!" is only true when NOTHING is filtered out. With a
+          // status/priority filter active, an empty list means "none match
+          // this filter", not "zero tasks exist" — the two read very
+          // differently and showing the celebratory message for both was
+          // confusing on a filter like Blocked/On Hold (BUG-034).
+          selectedFilter === 'all' && selectedPriority === 'all' ? (
+            <EmptyState type="tasks" />
+          ) : (
+            <EmptyState
+              type="custom"
+              title={`No ${selectedFilter !== 'all' ? statusLabel(selectedFilter) : ''} tasks`.replace('  ', ' ')}
+              message={
+                selectedFilter !== 'all' && selectedPriority !== 'all'
+                  ? `No ${priorityLabel(selectedPriority)} priority tasks with status "${statusLabel(selectedFilter)}".`
+                  : selectedFilter !== 'all'
+                    ? `No tasks with status "${statusLabel(selectedFilter)}".`
+                    : `No ${priorityLabel(selectedPriority)} priority tasks.`
+              }
+            />
+          )
+        }
         contentContainerStyle={styles.list}
         refreshControl={
           <RefreshControl
@@ -507,9 +528,17 @@ function TaskCard({
         </View>
 
         <View style={styles.taskMeta}>
-          <Text style={styles.noticeRef} numberOfLines={1}>
-            {task.notice.noticeType || 'Notice'} #{task.notice.noticeNumber?.slice(0, 8) || '...'}
-          </Text>
+          {/* Two independent fallbacks ('Notice' for a missing type, '...'
+              for a missing number) used to compound into the literal
+              "Notice #..." when a task had neither — a placeholder that
+              looked like real data (BUG-011). Show the real reference when
+              there's something to show, otherwise hide the line entirely. */}
+          {(task.notice.noticeType || task.notice.noticeNumber) && (
+            <Text style={styles.noticeRef} numberOfLines={1}>
+              {task.notice.noticeType ? `${task.notice.noticeType} ` : ''}
+              {task.notice.noticeNumber ? `#${task.notice.noticeNumber.slice(0, 8)}` : ''}
+            </Text>
+          )}
           {dueDate ? (
             <View style={styles.dueDateContainer}>
               <Clock size={12} color={task.isOverdue ? COLORS.error : COLORS.gray[400]} />

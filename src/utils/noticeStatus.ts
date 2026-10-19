@@ -12,6 +12,7 @@
  */
 
 import type { NoticeStatus } from '../types/api';
+import { t } from '../i18n';
 
 /** Where each status may legally move to. */
 const ALLOWED_TRANSITIONS: Record<NoticeStatus, NoticeStatus[]> = {
@@ -34,6 +35,7 @@ const REQUIRES_REASON: [NoticeStatus, NoticeStatus][] = [
   ['archived', 'analyzed'], // restoring
 ];
 
+/** English fallback, used only when a status has no i18n entry. */
 export const STATUS_LABELS: Record<NoticeStatus, string> = {
   uploaded: 'Uploaded',
   processing: 'Processing',
@@ -62,7 +64,19 @@ export function transitionRequiresReason(from?: string | null, to?: string | nul
   return REQUIRES_REASON.some(([f, t]) => f === a && t === b);
 }
 
+// `t()` is the module-level i18n function (src/i18n/index.ts), not the
+// useTranslation() hook — it reads the live locale synchronously, so this
+// works correctly from both components (which already re-render on locale
+// change via their own useTranslation() call) and plain call sites like
+// noticeShare.ts that run outside render (BUG-030).
 export function statusLabel(status?: string | null): string {
   if (!status) return 'Unknown';
-  return STATUS_LABELS[status.toLowerCase() as NoticeStatus] ?? status.replace(/_/g, ' ');
+  const key = status.toLowerCase();
+  const translated = t(`noticeStatus.${key}`);
+  // i18n-js returns the key itself (or a "[missing ...]" string) when there
+  // is no entry — fall back to the English map, then to a cleaned raw value.
+  if (translated && translated !== `noticeStatus.${key}` && !translated.startsWith('[missing')) {
+    return translated;
+  }
+  return STATUS_LABELS[key as NoticeStatus] ?? status.replace(/_/g, ' ');
 }

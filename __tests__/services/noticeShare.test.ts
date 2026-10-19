@@ -54,7 +54,7 @@ describe('buildNoticeShareMessage', () => {
   });
 
   it('makes the status readable rather than a raw enum', () => {
-    expect(buildNoticeShareMessage(NOTICE)).toContain('Status: in progress');
+    expect(buildNoticeShareMessage(NOTICE)).toContain('Status: In Progress');
   });
 
   it('formats the deadline as a date, not an ISO string', () => {
@@ -64,14 +64,11 @@ describe('buildNoticeShareMessage', () => {
     expect(message).not.toContain('2026-09-15T00:00:00Z');
   });
 
-  it('appends the deep link when one is supplied', () => {
-    const message = buildNoticeShareMessage(NOTICE, 'effortlessinsight://notices/n1');
+  it('links to the web app, not an effortlessinsight:// deep link a recipient without the app cannot open', () => {
+    const message = buildNoticeShareMessage(NOTICE);
 
-    expect(message).toContain('effortlessinsight://notices/n1');
-  });
-
-  it('omits the link line entirely when none is supplied', () => {
-    expect(buildNoticeShareMessage(NOTICE)).not.toContain('Open in EffortlessInsight');
+    expect(message).toContain('https://effortlessinsight.in/notices/n1');
+    expect(message).not.toContain('effortlessinsight://');
   });
 
   it('never leaks "undefined" for missing optional fields', () => {
@@ -80,7 +77,7 @@ describe('buildNoticeShareMessage', () => {
     const message = buildNoticeShareMessage(sparse);
 
     expect(message).not.toMatch(/undefined|null|NaN/);
-    expect(message).toContain('Status: uploaded');
+    expect(message).toContain('Status: Uploaded');
   });
 
   it('drops an unparseable deadline instead of printing "Invalid Date"', () => {

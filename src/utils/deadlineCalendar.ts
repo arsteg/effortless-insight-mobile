@@ -132,8 +132,24 @@ export interface NoticeLike {
   noticeNumber?: string;
   noticeType?: string;
   responseDeadline?: string;
+  /**
+   * Server-computed days left/overdue — derived from the notice's effective
+   * (extended) deadline, not `responseDeadline`. Every other screen shows
+   * "days left" from this field, so the calendar bucketing a notice by the
+   * raw `responseDeadline` instead put it on a different day than the rest
+   * of the app implied (BUG-016). `NoticeDto` always carries this field
+   * (possibly null), so prefer it over `responseDeadline` when present.
+   */
+  daysRemaining?: number | null;
   priority?: NoticePriority | string;
   status?: string;
+}
+
+/** The date `daysRemaining` days from `now`, as an ISO string. */
+function effectiveDeadlineIso(daysRemaining: number, now: Date): string {
+  const date = new Date(now);
+  date.setDate(date.getDate() + daysRemaining);
+  return date.toISOString();
 }
 
 /** Shape taken from a `/tasks/my` row. */
@@ -169,19 +185,25 @@ export function noticesToCalendarItems(
   now: Date = new Date()
 ): CalendarItem[] {
   return notices
-    .filter((n) => !!n.responseDeadline)
+    .filter((n) => !!n.responseDeadline || n.daysRemaining != null)
     .filter((n) => !INACTIVE_NOTICE_STATUSES.has((n.status ?? '').toLowerCase()))
-    .map((n) => ({
-      id: `notice-${n.id}`,
-      type: 'notice' as const,
-      title: n.noticeNumber || n.noticeType || 'Notice',
-      dueDate: n.responseDeadline!,
-      priority: (n.priority as string) || 'medium',
-      noticeId: n.id,
-      noticeNumber: n.noticeNumber,
-      status: n.status,
-      isOverdue: isPast(n.responseDeadline!, now),
-    }));
+    .map((n) => {
+      const dueDate =
+        n.daysRemaining != null
+          ? effectiveDeadlineIso(n.daysRemaining, now)
+          : n.responseDeadline!;
+      return {
+        id: `notice-${n.id}`,
+        type: 'notice' as const,
+        title: n.noticeNumber || n.noticeType || 'Notice',
+        dueDate,
+        priority: (n.priority as string) || 'medium',
+        noticeId: n.id,
+        noticeNumber: n.noticeNumber,
+        status: n.status,
+        isOverdue: n.daysRemaining != null ? n.daysRemaining < 0 : isPast(dueDate, now),
+      };
+    });
 }
 
 /** Tasks with a due date, as calendar items. */

@@ -20,7 +20,7 @@ import { getCachedNoticesAge } from '../../src/services/storage/cache';
 import { useUIStore } from '../../src/stores';
 import { LoadingSpinner, EmptyState, OfflineContentBadge } from '../../src/components/common';
 import { NoticeDto, NoticeStatus, NoticePriority, NoticeSource } from '../../src/types';
-import { SPACING, FONT_SIZES, BORDER_RADIUS, RISK_COLORS, STATUS_COLORS } from '../../src/utils/constants';
+import { SPACING, FONT_SIZES, BORDER_RADIUS, RISK_COLORS, STATUS_COLORS, PRIORITY_COLORS } from '../../src/utils/constants';
 import { useColors, useThemedStyles } from '../../src/theme/useTheme';
 import type { Palette } from '../../src/theme/palettes';
 import { useTranslation } from '../../src/hooks';
@@ -122,78 +122,7 @@ export default function NoticesScreen() {
 
   const keyExtractor = useCallback((item: NoticeDto) => item.id, []);
 
-  const renderHeader = () => (
-    <View style={styles.header}>
-      {/* Offline, say that this list is a saved copy and how old it is. */}
-      <OfflineContentBadge cachedAt={cachedAt} visible={!isOnline} />
-
-      {/* Search Bar */}
-      <View style={styles.searchContainer}>
-        <Search size={20} color={COLORS.gray[400]} />
-        <TextInput
-          style={styles.searchInput}
-          placeholder={t('notices.searchPlaceholder')}
-          placeholderTextColor={COLORS.gray[400]}
-          value={search}
-          onChangeText={setSearch}
-          returnKeyType="search"
-        />
-        {search.length > 0 && (
-          // Clearing a 15-character GSTIN by backspace is 15 taps; this is one.
-          <TouchableOpacity
-            style={styles.clearButton}
-            onPress={() => setSearch('')}
-            accessibilityRole="button"
-            accessibilityLabel="Clear search"
-            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-          >
-            <X size={16} color={COLORS.gray[500]} />
-          </TouchableOpacity>
-        )}
-        <TouchableOpacity
-          style={styles.filterButton}
-          onPress={() => setShowFilters(!showFilters)}
-        >
-          <Filter size={20} color={showFilters ? COLORS.primary : COLORS.gray[500]} />
-        </TouchableOpacity>
-      </View>
-
-      {/* Filter Pills */}
-      {showFilters && (
-        <View style={styles.filterContainer}>
-          <Text style={styles.filterLabel}>{t('notices.statusLabel')}</Text>
-          <View style={styles.filterPills}>
-            {statusOptions(t).map((option) => (
-              <TouchableOpacity
-                key={option.value}
-                style={[
-                  styles.filterPill,
-                  selectedStatus === option.value && styles.filterPillActive,
-                ]}
-                onPress={() => setSelectedStatus(option.value)}
-              >
-                <Text
-                  style={[
-                    styles.filterPillText,
-                    selectedStatus === option.value && styles.filterPillTextActive,
-                  ]}
-                >
-                  {option.label}
-                </Text>
-              </TouchableOpacity>
-            ))}
-          </View>
-        </View>
-      )}
-
-      {/* Results Count */}
-      <View style={styles.resultsHeader}>
-        <Text style={styles.resultsCount}>
-          {data?.pages[0]?.totalCount || 0} notices
-        </Text>
-      </View>
-    </View>
-  );
+  const totalCount = data?.pages[0]?.totalCount || 0;
 
   const renderFooter = () => {
     if (!isFetchingNextPage) return null;
@@ -214,7 +143,20 @@ export default function NoticesScreen() {
         data={notices}
         renderItem={renderNotice}
         keyExtractor={keyExtractor}
-        ListHeaderComponent={renderHeader}
+        ListHeaderComponent={
+          <NoticesListHeader
+            cachedAt={cachedAt}
+            isOnline={isOnline}
+            search={search}
+            onSearchChange={setSearch}
+            onClearSearch={() => setSearch('')}
+            showFilters={showFilters}
+            onToggleFilters={() => setShowFilters(!showFilters)}
+            selectedStatus={selectedStatus}
+            onSelectStatus={setSelectedStatus}
+            totalCount={totalCount}
+          />
+        }
         ListFooterComponent={renderFooter}
         ListEmptyComponent={
           <EmptyState
@@ -240,6 +182,111 @@ export default function NoticesScreen() {
   );
 }
 
+// A standalone component (not a useCallback-wrapped render function) passed
+// to FlatList as a JSX element. React keeps the TextInput instance alive
+// across re-renders because the element TYPE at this tree position never
+// changes — only its props do. The previous approach passed a function whose
+// identity changed on every keystroke (it depended on `search`), which made
+// FlatList treat it as a brand-new component and remount the header —
+// including the TextInput — after every single character (BUG-008).
+function NoticesListHeader({
+  cachedAt,
+  isOnline,
+  search,
+  onSearchChange,
+  onClearSearch,
+  showFilters,
+  onToggleFilters,
+  selectedStatus,
+  onSelectStatus,
+  totalCount,
+}: {
+  cachedAt: number | null;
+  isOnline: boolean;
+  search: string;
+  onSearchChange: (text: string) => void;
+  onClearSearch: () => void;
+  showFilters: boolean;
+  onToggleFilters: () => void;
+  selectedStatus: NoticeStatus | 'all';
+  onSelectStatus: (status: NoticeStatus | 'all') => void;
+  totalCount: number;
+}) {
+  const { t } = useTranslation();
+  const styles = useThemedStyles(createStyles);
+  const COLORS = useColors();
+
+  return (
+    <View style={styles.header}>
+      {/* Offline, say that this list is a saved copy and how old it is. */}
+      <OfflineContentBadge cachedAt={cachedAt} visible={!isOnline} />
+
+      {/* Search Bar */}
+      <View style={styles.searchContainer}>
+        <Search size={20} color={COLORS.gray[400]} />
+        <TextInput
+          style={styles.searchInput}
+          placeholder={t('notices.searchPlaceholder')}
+          placeholderTextColor={COLORS.gray[400]}
+          value={search}
+          onChangeText={onSearchChange}
+          returnKeyType="search"
+        />
+        {search.length > 0 && (
+          // Clearing a 15-character GSTIN by backspace is 15 taps; this is one.
+          <TouchableOpacity
+            style={styles.clearButton}
+            onPress={onClearSearch}
+            accessibilityRole="button"
+            accessibilityLabel="Clear search"
+            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+          >
+            <X size={16} color={COLORS.gray[500]} />
+          </TouchableOpacity>
+        )}
+        <TouchableOpacity style={styles.filterButton} onPress={onToggleFilters}>
+          <Filter size={20} color={showFilters ? COLORS.primary : COLORS.gray[500]} />
+        </TouchableOpacity>
+      </View>
+
+      {/* Filter Pills */}
+      {showFilters && (
+        <View style={styles.filterContainer}>
+          <Text style={styles.filterLabel}>{t('notices.statusLabel')}</Text>
+          <View style={styles.filterPills}>
+            {statusOptions(t).map((option) => (
+              <TouchableOpacity
+                key={option.value}
+                style={[
+                  styles.filterPill,
+                  selectedStatus === option.value && styles.filterPillActive,
+                ]}
+                onPress={() => onSelectStatus(option.value)}
+              >
+                <Text
+                  style={[
+                    styles.filterPillText,
+                    selectedStatus === option.value && styles.filterPillTextActive,
+                  ]}
+                >
+                  {option.label}
+                </Text>
+              </TouchableOpacity>
+            ))}
+          </View>
+        </View>
+      )}
+
+      {/* Results Count */}
+      <View style={styles.resultsHeader}>
+        <Text style={styles.resultsCount}>
+          {totalCount} {totalCount === 1 ? 'notice' : 'notices'}
+        </Text>
+      </View>
+    </View>
+  );
+}
+
 function NoticeCard({
   notice,
   onPress,
@@ -259,7 +306,12 @@ function NoticeCard({
     return RISK_COLORS[riskLevel as keyof typeof RISK_COLORS] || COLORS.gray[400];
   };
 
-  const formatCurrency = (amount?: number) => {
+  const getPriorityColor = (priority?: string) => {
+    if (!priority) return COLORS.gray[400];
+    return PRIORITY_COLORS[priority as keyof typeof PRIORITY_COLORS] || COLORS.gray[400];
+  };
+
+  const formatCurrency = (amount?: number | null) => {
     if (!amount) return '-';
     if (amount >= 100000) {
       return `₹${(amount / 100000).toFixed(1)}L`;
@@ -283,11 +335,16 @@ function NoticeCard({
 
   const statusColor = getStatusColor(notice.status);
   const riskColor = getRiskColor(notice.riskLevel);
+  const priorityColor = getPriorityColor(notice.priority);
 
   // Deadline tone: overdue = coral, due today/≤3 = amber, else comfortable mint.
+  // `== null` so a notice with no due date is caught whether the API omits
+  // daysRemaining or sends it as null — the latter used to fall through to
+  // the numeric branches below and render the literal word "null" (BUG-003:
+  // "null days left").
   const days = notice.daysRemaining;
   const deadlineTone =
-    days === undefined
+    days == null
       ? { fg: COLORS.gray[500], bg: COLORS.gray[100] }
       : days < 0
         ? { fg: COLORS.coral, bg: COLORS.coralLight }
@@ -330,29 +387,42 @@ function NoticeCard({
         <View style={[styles.deadlineChip, { backgroundColor: deadlineTone.bg }]}>
           <Clock size={13} color={deadlineTone.fg} />
           <Text style={[styles.deadlineText, { color: deadlineTone.fg }]}>
-            {days !== undefined
-              ? days < 0
-                ? `${Math.abs(days)}d overdue`
-                : days === 0
-                ? 'Due today'
-                : `${days}d left`
-              : 'No deadline'}
+            {days == null
+              ? 'No due date'
+              : days < 0
+              ? `${Math.abs(days)}d overdue`
+              : days === 0
+              ? 'Due today'
+              : `${days}d left`}
           </Text>
         </View>
+
+        {/* Priority pill — distinct from the risk pill below. The app used
+            to show only risk level here, which QA mistook for priority since
+            it sat where web shows its Priority column (BUG-018: an overdue
+            notice web marks High priority showed as "Low" here). */}
+        {notice.priority && (
+          <View style={[styles.riskBadge, { backgroundColor: `${priorityColor}1A` }]}>
+            <View style={[styles.riskDot, { backgroundColor: priorityColor }]} />
+            <Text style={[styles.riskText, { color: priorityColor }]}>
+              {t('notices.priorityBadge', { value: t(`analysis.priority.${notice.priority}`) })}
+            </Text>
+          </View>
+        )}
 
         {/* Risk pill */}
         {notice.riskLevel && (
           <View style={[styles.riskBadge, { backgroundColor: `${riskColor}1A` }]}>
             <View style={[styles.riskDot, { backgroundColor: riskColor }]} />
             <Text style={[styles.riskText, { color: riskColor }]}>
-              {notice.riskLevel.charAt(0).toUpperCase() + notice.riskLevel.slice(1)}
+              {t('notices.riskBadge', { value: t(`analysis.priority.${notice.riskLevel}`) })}
             </Text>
           </View>
         )}
       </View>
 
       {/* Overdue Warning */}
-      {notice.daysRemaining !== undefined && notice.daysRemaining < 0 && (
+      {notice.daysRemaining != null && notice.daysRemaining < 0 && (
         <View style={styles.overdueWarning}>
           <AlertCircle size={14} color={COLORS.coral} />
           <Text style={styles.overdueText}>{t('notices.immediateAttention')}</Text>

@@ -33,6 +33,10 @@ export default {
     tasks: 'Tasks',
     profile: 'Profile',
     notifications: 'Notifications',
+    // The tab bar label stays "Alerts" (short) even though the header above
+    // it reads "Notifications" (BUG-014) — a distinct key so translating it
+    // can't accidentally reintroduce that bug by reusing `notifications`.
+    alerts: 'Alerts',
   },
 
   // Dashboard
@@ -105,6 +109,30 @@ export default {
     sourceManual: 'Manual',
     sourceUpload: 'Upload',
     immediateAttention: 'Immediate attention required',
+    priorityBadge: '{{value}} priority',
+    riskBadge: '{{value}} risk',
+  },
+
+  // Notice status badges — keyed by the raw API status string (lowercase,
+  // underscores), unlike the `notices.*` filter-pill labels above which use
+  // camelCase keys and don't cover every status (BUG-030).
+  noticeStatus: {
+    uploaded: 'Uploaded',
+    processing: 'Processing',
+    analyzed: 'Analyzed',
+    in_progress: 'In Progress',
+    responded: 'Responded',
+    closed: 'Closed',
+    archived: 'Archived',
+    failed: 'Failed',
+  },
+
+  // Support ticket status badges
+  supportTicket: {
+    open: 'Open',
+    in_progress: 'In progress',
+    resolved: 'Resolved',
+    closed: 'Closed',
   },
 
   // Notice Detail
@@ -268,6 +296,8 @@ export default {
       done: 'Done',
       blocked: 'Blocked',
       on_hold: 'On Hold',
+      cancelled: 'Cancelled',
+      archived: 'Archived',
     },
     total: 'Total',
     overdueShown: 'Overdue shown',

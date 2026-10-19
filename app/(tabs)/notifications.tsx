@@ -269,7 +269,14 @@ export default function NotificationsScreen() {
       <View style={styles.container}>
         <Stack.Screen
           options={{
-            title: 'Notifications',
+            // headerTitle, not title (BUG-014): this screen is a direct leaf
+            // of the (tabs) Tabs navigator, so the generic `title` key here
+            // was overwriting the SAME options object the parent
+            // Tabs.Screen set `title: 'Alerts'` on — including the tab bar
+            // label, which defaults from `title` — the moment this screen
+            // mounted. The tab label changed to "Notifications" and
+            // truncated to "Notificati…" the instant the tab was selected.
+            headerTitle: 'Notifications',
             headerRight: () => (
               <TouchableOpacity onPress={() => router.push('/settings/notifications')}>
                 <Settings color={COLORS.white} size={24} />
@@ -289,7 +296,7 @@ export default function NotificationsScreen() {
       <View style={styles.container}>
         <Stack.Screen
           options={{
-            title: 'Notifications',
+            headerTitle: 'Notifications',
             headerRight: () => (
               <TouchableOpacity onPress={() => router.push('/settings/notifications')}>
                 <Settings color={COLORS.white} size={24} />
@@ -314,7 +321,7 @@ export default function NotificationsScreen() {
     <View style={styles.container}>
       <Stack.Screen
         options={{
-          title: 'Notifications',
+          headerTitle: 'Notifications',
           headerRight: () => (
             <TouchableOpacity onPress={() => router.push('/settings/notifications')}>
               <Settings color={COLORS.white} size={24} />

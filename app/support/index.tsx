@@ -21,13 +21,23 @@ import { useSupportTickets } from '../../src/hooks/useSupport';
 import { SupportTicketSummary, SupportTicketStatus } from '../../src/services/api/support';
 import { Button, LoadingSpinner, EmptyState } from '../../src/components/common';
 import { COLORS, SPACING, FONT_SIZES, BORDER_RADIUS } from '../../src/utils/constants';
+import { t } from '../../src/i18n';
 
+/** English fallback, used only when a status has no i18n entry. */
 const STATUS_LABELS: Record<SupportTicketStatus, string> = {
   open: 'Open',
   in_progress: 'In progress',
   resolved: 'Resolved',
   closed: 'Closed',
 };
+
+/** In the active language (BUG-030). */
+function statusLabel(status: SupportTicketStatus): string {
+  const key = `supportTicket.${status}`;
+  const translated = t(key);
+  if (translated !== key && !translated.startsWith('[missing')) return translated;
+  return STATUS_LABELS[status];
+}
 
 const STATUS_COLORS: Record<SupportTicketStatus, { bg: string; text: string }> = {
   open: { bg: COLORS.primary + '20', text: COLORS.primary },
@@ -108,7 +118,7 @@ function TicketRow({ ticket }: { ticket: SupportTicketSummary }) {
         <View style={styles.bottomRow}>
           <View style={[styles.statusBadge, { backgroundColor: statusStyle.bg }]}>
             <Text style={[styles.statusText, { color: statusStyle.text }]}>
-              {STATUS_LABELS[ticket.status]}
+              {statusLabel(ticket.status)}
             </Text>
           </View>
           <View style={styles.messageCount}>

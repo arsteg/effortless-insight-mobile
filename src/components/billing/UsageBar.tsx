@@ -38,8 +38,11 @@ export function UsageBar({ used, limit, percentage, label, type, suffix = '' }: 
     }
   };
 
-  // Consider unlimited if limit is 0 or very high (>= 10000)
-  const isUnlimited = limit === 0 || limit >= 10000;
+  // The backend's actual "unlimited" sentinel is a 0 limit. The old
+  // `|| limit >= 10000` guess reclassified real, finite plan limits (e.g. the
+  // API Calls plan's real cap of 10,000) as "Unlimited" even though the web
+  // app correctly shows "0 / 10,000" for the same account (BUG-028).
+  const isUnlimited = limit === 0;
 
   const getProgressColor = () => {
     if (isUnlimited) return COLORS.primary;

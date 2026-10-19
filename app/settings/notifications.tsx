@@ -453,6 +453,9 @@ const createStyles = (COLORS: Palette) =>
     alignItems: 'center',
     gap: SPACING.md,
     paddingVertical: SPACING.md,
+    // Missing from the other settingRow siblings — the icon sat flush
+    // against the screen edge instead of matching their inset (BUG-032).
+    paddingHorizontal: SPACING.md,
     borderBottomWidth: 1,
     borderBottomColor: COLORS.gray[100],
   },
